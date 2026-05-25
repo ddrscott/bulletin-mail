@@ -33,12 +33,34 @@ export type Group = {
   subject_prefix: string | null;
   archive_visibility: ArchiveVisibility;
   max_message_size: number;
+  /** Markdown text shown on the public subscribe form. Null = no statement,
+   *  no checkbox shown. */
+  subscribe_statement: string | null;
+  created_at: number;
+};
+
+export type SubscriptionRequestState = "pending" | "approved" | "rejected";
+
+export type SubscriptionRequest = {
+  id: string;
+  group_id: string;
+  email: string;
+  display_name: string;
+  about: string | null;
+  state: SubscriptionRequestState;
+  decided_by: string | null;
+  decided_at: number | null;
+  decided_note: string | null;
   created_at: number;
 };
 
 export type MemberRole = "member" | "moderator" | "sender_only";
 export type MemberDeliveryMode = "each" | "digest" | "paused";
-export type MemberStatus = "active" | "bouncing" | "unsubscribed";
+export type MemberStatus =
+  | "active"
+  | "bouncing"
+  | "unsubscribed"
+  | "pending_confirmation"; // admin-added; waiting for the member to opt in
 
 export type Member = {
   id: string;
@@ -115,13 +137,36 @@ export type ModerationQueueRow = {
   created_at: number;
 };
 
-export type AdminRole = "admin" | "super_admin";
+/**
+ * Roles on the per-tenant `admins` table:
+ *   - 'admin'      : full tenant control (groups, members, settings, can
+ *                    promote moderators)
+ *   - 'moderator'  : can edit the wiki and approve subscription requests,
+ *                    but cannot manage groups/members or change roles
+ *   - 'super_admin': legacy slot; not used in V1
+ */
+export type AdminRole = "admin" | "moderator" | "super_admin";
 
 export type Admin = {
   id: string;
   tenant_id: string;
   email: string;
   role: AdminRole;
+  display_name: string | null;
+  created_at: number;
+};
+
+/**
+ * Site-level admins. Operate the BulletinMail instance itself — create
+ * tenants, see global stats. Not scoped to any one tenant.
+ */
+export type SiteAdminRole = "admin" | "super_admin";
+
+export type SiteAdmin = {
+  id: string;
+  email: string;
+  role: SiteAdminRole;
+  display_name: string | null;
   created_at: number;
 };
 

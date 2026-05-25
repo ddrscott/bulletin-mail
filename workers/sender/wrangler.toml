@@ -24,6 +24,12 @@ dead_letter_queue = "bulletinmail-send-dlq"
 [[send_email]]
 name = "EMAIL"
 
+# Daily moderator-digest cron. 14:00 UTC = 09:00 ET / 06:00 PT — lands in
+# inbox well before workday begins for both coasts. Single instance-wide
+# schedule; the handler iterates over every tenant with pending requests.
+[triggers]
+crons = ["0 14 * * *"]
+
 [vars]
 INSTANCE_APEX_DOMAIN = "example.org"
 INSTANCE_ADMIN_DOMAIN = "app.example.org"

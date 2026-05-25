@@ -9,7 +9,10 @@
     "./config": "./src/config.ts",
     "./slug": "./src/slug.ts",
     "./time": "./src/time.ts",
-    "./ulid": "./src/ulid.ts"
+    "./ulid": "./src/ulid.ts",
+    "./design/tokens.css": "./design/tokens.css",
+    "./design/fonts.css": "./design/fonts.css",
+    "./design/components.css": "./design/components.css"
   },
   "scripts": {
     "test": "vitest run",

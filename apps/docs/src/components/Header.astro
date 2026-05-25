@@ -1,0 +1,18 @@
+---
+// Site-wide header — simplified single-row masthead. No volume marker, no
+// middle filler rule. Just:
+//
+//   THE BULLETIN                          [search ⌘K]  ⎘
+//
+// Search + icons cluster on the right; wordmark on the left; heavy 2px
+// rule under the whole row. Collapses to two rows on narrow viewports.
+// Rationale: /DESIGN.md §3.
+import Search from "@astrojs/starlight/components/Search.astro";
+import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+---
+
+<header class="masthead masthead--chrome">
+  <a class="wordmark" href="/">THE BULLETIN</a>
+  <div class="masthead-search"><Search /></div>
+  <div class="masthead-icons"><SocialIcons /></div>
+</header>

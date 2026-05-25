@@ -1,0 +1,93 @@
+/*
+ * BulletinMail design tokens.
+ *
+ * Single source of truth for color, type, spacing across admin + docs.
+ * Spec: /DESIGN.md.
+ *
+ * Imported as-is by:
+ *   apps/admin/src/styles.css   (build copies the file into dist/)
+ *   apps/docs/src/styles/global.css  (registered via Starlight customCss)
+ *
+ * Conventions
+ *   - One accent color (--indigo). Alert red is semantic-only.
+ *   - 8px spacing grid. Numeric ramp at --space-*.
+ *   - Type voices: --font-serif (headlines), --font-sans (body/UI),
+ *     --font-mono (IDs/addresses/metadata).
+ */
+
+:root {
+  /* Neutrals — warm, paper-aged */
+  --paper:        #FAF8F2;
+  --paper-2:      #F2EFE6;
+  --ink:          #1A1814;
+  --ink-muted:    #6B6B66;
+  --rule:         #D4D0C4;
+  --rule-strong:  #1A1814;
+
+  /* Accent — Indigo Stamp */
+  --indigo:       #1E2A78;
+  --indigo-ink:   #FAF8F2;
+  --indigo-tint:  #E7E9F2;
+
+  /* Semantic only — never decorative */
+  --alert:        #C8200F;
+  --alert-tint:   #FBE6E3;
+
+  /* Type voices */
+  --font-serif: "Source Serif 4", "Source Serif Pro", Charter, "Iowan Old Style", Georgia, serif;
+  --font-sans:  Inter, -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, "JetBrains Mono", monospace;
+
+  /* Type scale — UI (sans/mono), modular 1.250 */
+  --text-xs:    12px;
+  --text-sm:    14px;
+  --text-base:  16px;
+  --text-md:    18px;
+  --text-lg:    22px;
+
+  /* Type scale — Headlines (serif), modular 1.414 */
+  --serif-h2:   28px;
+  --serif-h1:   44px;
+  --serif-hero: 64px;
+
+  /* Line heights */
+  --lh-prose:   1.6;
+  --lh-headline: 1.15;
+  --lh-mono:    1.45;
+
+  /* Spacing — powers of 8 */
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    24px;
+  --space-6:    32px;
+  --space-7:    48px;
+  --space-8:    64px;
+  --space-9:    96px;
+  --space-10:  128px;
+
+  /* Layout widths */
+  --width-prose:  680px;
+  --width-board: 1100px;
+  --width-shell: 1024px;
+  --width-task:   384px;
+
+  /* Borders */
+  --hairline:    1px solid var(--rule);
+  --rule-mast:   2px solid var(--rule-strong);
+
+  /* Radii — square is default. 2px for inputs/buttons. Never round stamps. */
+  --radius-control: 2px;
+
+  /* Motion */
+  --transition-quick: 150ms ease-out;
+}
+
+/* Light mode only — paper feel, every surface. We intentionally do not
+   ship dark tokens. Audience prefers a stable single theme. */
+:root { color-scheme: light; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --transition-quick: 0s; }
+}

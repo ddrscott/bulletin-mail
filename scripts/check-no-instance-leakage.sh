@@ -34,9 +34,14 @@ SCAN_DIRS=(
 EXCLUDE_GLOBS=(
   "*/node_modules/*"
   "*/dist/*"
+  "*/.astro/*"
   "*/.wrangler/*"
   "*/tests/fixtures/*"
   "*.generated.toml"
+  # Docs + marketing copy is *content*, not generic code. The Astro site at
+  # apps/docs/ ships with BulletinMail branding by default; forks fork it
+  # whole (per the AGPL distribution model, PRD §19).
+  "apps/docs/*"
 )
 
 fail=0

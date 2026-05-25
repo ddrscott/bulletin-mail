@@ -135,34 +135,52 @@ function renderVarsBlock(): string {
   return lines.join("\n") + "\n";
 }
 
-const WORKERS = ["inbound", "sender", "web"] as const;
+type WorkerEntry = {
+  /** Friendly id used in log lines and the routes-rewrite switch. */
+  name: string;
+  /** Directory containing wrangler.toml, relative to repo root. */
+  dir: string;
+  /** True if [vars] should be rendered for this worker (false for the docs site). */
+  hasVars: boolean;
+};
 
-for (const name of WORKERS) {
-  const srcPath = join("workers", name, "wrangler.toml");
+const WORKERS: WorkerEntry[] = [
+  { name: "inbound", dir: "workers/inbound", hasVars: true },
+  { name: "sender", dir: "workers/sender", hasVars: true },
+  { name: "web", dir: "workers/web", hasVars: true },
+  // Docs is a pure static-assets Worker. No [vars] (Astro substitutes at
+  // build time), only routes get apex substitution.
+  { name: "docs", dir: "apps/docs", hasVars: false },
+];
+
+for (const w of WORKERS) {
+  const srcPath = join(w.dir, "wrangler.toml");
   if (!existsSync(srcPath)) {
-    console.warn(`skip ${name}: no source wrangler.toml`);
+    console.warn(`skip ${w.name}: no source wrangler.toml`);
     continue;
   }
 
   let src = readFileSync(srcPath, "utf8");
 
-  // Substitute the routes block on the web worker.
-  if (name === "web") {
-    const routesBlock =
-      `routes = [\n  { pattern = "*${config.apexDomain}/*", zone_name = "${config.apexDomain}" }\n]`;
-    if (/routes\s*=\s*\[[\s\S]*?\]/.test(src)) {
-      src = src.replace(/routes\s*=\s*\[[\s\S]*?\]/, routesBlock);
-    } else {
-      console.error(`web/wrangler.toml: expected a 'routes = [...]' block`);
-      process.exit(2);
-    }
+  // Route substitution. Each worker carries the routing strategy it wants;
+  // we only swap the apex token inside whatever it declared. The web Worker
+  // has multiple narrow routes plus a wildcard catch-all; the docs Worker
+  // has the apex catch-all; everything else has no routes.
+  if (/routes\s*=\s*\[[\s\S]*?\]/.test(src)) {
+    src = src.replace(/routes\s*=\s*\[([\s\S]*?)\]/, (_match, inner: string) => {
+      // Replace literal `example.org` (template placeholder) with the real apex.
+      const updated = inner.replace(/example\.org/g, config.apexDomain);
+      return `routes = [${updated}]`;
+    });
   }
 
-  // Truncate the existing [vars] block (must be the last section per convention).
-  src = src.replace(/\n\[vars\][\s\S]*$/, "\n");
-  // Trim trailing whitespace, then append the freshly rendered vars with a
-  // blank line separator from the preceding section.
-  src = src.replace(/\s+$/, "\n") + "\n" + renderVarsBlock();
+  if (w.hasVars) {
+    // Truncate the existing [vars] block (must be the last section per convention).
+    src = src.replace(/\n\[vars\][\s\S]*$/, "\n");
+    // Trim trailing whitespace, then append the freshly rendered vars with a
+    // blank line separator from the preceding section.
+    src = src.replace(/\s+$/, "\n") + "\n" + renderVarsBlock();
+  }
 
   // Substitute Cloudflare resource handles into the [[d1_databases]] /
   // [[r2_buckets]] / [[queues.*]] blocks.
@@ -174,7 +192,7 @@ for (const name of WORKERS) {
     src = src.replace(re, `$1"${info.database_id}"`);
   }
 
-  const outPath = join("workers", name, "wrangler.generated.toml");
+  const outPath = join(w.dir, "wrangler.generated.toml");
   writeFileSync(outPath, src);
   console.log(`wrote ${outPath}`);
 }

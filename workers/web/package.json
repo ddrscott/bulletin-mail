@@ -13,6 +13,7 @@
   "dependencies": {
     "@bulletinmail/db": "workspace:*",
     "@bulletinmail/shared": "workspace:*",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "marked": "^15.0.0"
   }
 }

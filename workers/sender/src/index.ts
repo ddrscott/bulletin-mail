@@ -35,6 +35,7 @@ import {
   buildReferencesChain,
   OutboundAssertionFailure,
 } from "@bulletinmail/mime";
+import { runDailyDigest } from "./digest.js";
 
 export interface Env {
   DB: D1Database;
@@ -84,6 +85,16 @@ export default {
         }
       }
     }
+  },
+
+  // Cron-driven daily digest. Schedule is in wrangler.toml under [triggers].
+  async scheduled(
+    _event: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    const config = loadFromEnv(env as unknown as Record<string, unknown>);
+    ctx.waitUntil(runDailyDigest(env, config));
   },
 };
 

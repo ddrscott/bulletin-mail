@@ -18,6 +18,10 @@ instance.config.local.json
 
 # Generated wrangler [vars] (rendered from instance.config.json at deploy time)
 workers/*/wrangler.generated.toml
+apps/*/wrangler.generated.toml
+
+# Astro internal cache (docs site)
+apps/*/.astro/
 
 # Test artifacts
 coverage/
