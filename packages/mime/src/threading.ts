@@ -60,34 +60,49 @@ export async function resolveParent(
 
   if (candidates.length === 0) return null;
 
+  const messageCols =
+    "id, group_id, original_message_id, in_reply_to_outbound, " +
+    "thread_id, from_email, from_name, subject, body_text, body_html, " +
+    "has_attachments, status, rejection_reason, received_at, sent_at";
+
   for (const candidate of candidates) {
-    // Try matching as one of our outbound message ids (the local part of the
-    // Message-ID we emitted).
+    // 1. Try matching as one of our outbound message ids (legacy / future:
+    //    only useful when we control the Message-ID — Cloudflare Email
+    //    Service doesn't currently let us).
     const local = extractLocalPart(candidate);
     const ourMatch = await db
-      .prepare(
-        "SELECT id, group_id, original_message_id, in_reply_to_outbound, " +
-          "thread_id, from_email, from_name, subject, body_text, body_html, " +
-          "has_attachments, status, rejection_reason, received_at, sent_at " +
-          "FROM messages WHERE id = ?",
-      )
+      .prepare(`SELECT ${messageCols} FROM messages WHERE id = ?`)
       .bind(local)
       .first<Message>();
     if (ourMatch) return ourMatch;
 
-    // Otherwise try matching the original sender's Message-ID (for the case
-    // where the very first message in a thread was authored externally and
-    // we recorded its Message-ID).
+    // 2. Try matching the sender's original Message-ID (recorded on inbound).
+    //    Catches the case where someone replies to a message we *received* and
+    //    archived but never re-sent.
     const senderMatch = await db
-      .prepare(
-        "SELECT id, group_id, original_message_id, in_reply_to_outbound, " +
-          "thread_id, from_email, from_name, subject, body_text, body_html, " +
-          "has_attachments, status, rejection_reason, received_at, sent_at " +
-          "FROM messages WHERE original_message_id = ?",
-      )
+      .prepare(`SELECT ${messageCols} FROM messages WHERE original_message_id = ?`)
       .bind(candidate)
       .first<Message>();
     if (senderMatch) return senderMatch;
+
+    // 3. Try matching Cloudflare's per-recipient outbound id. This is the
+    //    common path for replies-to-our-sends: the mail client's
+    //    In-Reply-To references the Message-ID Cloudflare assigned to that
+    //    recipient's specific copy, which we recorded in
+    //    deliveries.provider_message_id when env.EMAIL.send returned.
+    //    Provider ids are stored with surrounding angle brackets; the
+    //    incoming candidate has them stripped — so we check both forms.
+    const providerMatch = await db
+      .prepare(
+        "SELECT m.id, m.group_id, m.original_message_id, m.in_reply_to_outbound, " +
+          "m.thread_id, m.from_email, m.from_name, m.subject, m.body_text, m.body_html, " +
+          "m.has_attachments, m.status, m.rejection_reason, m.received_at, m.sent_at " +
+          "FROM messages m JOIN deliveries d ON d.message_id = m.id " +
+          "WHERE d.provider_message_id = ? OR d.provider_message_id = ? LIMIT 1",
+      )
+      .bind(candidate, `<${candidate}>`)
+      .first<Message>();
+    if (providerMatch) return providerMatch;
   }
 
   return null;
