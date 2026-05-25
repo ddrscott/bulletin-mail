@@ -1,0 +1,18 @@
+{
+  "name": "@bulletinmail/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --config wrangler.generated.toml",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bulletinmail/db": "workspace:*",
+    "@bulletinmail/shared": "workspace:*",
+    "hono": "^4.6.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@bulletinmail/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./slug": "./src/slug.ts",
+    "./time": "./src/time.ts",
+    "./ulid": "./src/ulid.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "ulidx": "^2.4.0"
+  }
+}

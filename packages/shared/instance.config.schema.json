@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OWNER/bulletinmail/blob/main/packages/shared/instance.config.schema.json",
+  "title": "InstanceConfig",
+  "description": "Per-deployment configuration for a BulletinMail instance. See PRD §20.",
+  "type": "object",
+  "required": [
+    "apexDomain",
+    "adminDomain",
+    "productName",
+    "productNameShort",
+    "tagline",
+    "archiveUrlTemplate",
+    "unsubscribeUrlTemplate",
+    "adminUrl",
+    "operator"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+
+    "apexDomain": {
+      "type": "string",
+      "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$",
+      "description": "Root domain serving the instance, e.g. 'lists.example.org'."
+    },
+    "adminDomain": {
+      "type": "string",
+      "description": "Subdomain serving the admin app, e.g. 'app.lists.example.org'."
+    },
+    "productName": { "type": "string", "minLength": 1 },
+    "productNameShort": { "type": "string", "minLength": 1 },
+    "tagline": { "type": "string" },
+
+    "supportAddress": { "type": "string", "default": "support" },
+    "abuseAddress": { "type": "string", "default": "abuse" },
+    "dmarcAddress": { "type": "string", "default": "dmarc" },
+    "noreplyAddress": { "type": "string", "default": "noreply" },
+    "unsubscribeAddressPrefix": {
+      "type": "string",
+      "default": "unsubscribe+",
+      "description": "Local-part prefix for one-click unsubscribe tokens, e.g. 'unsubscribe+'."
+    },
+
+    "archiveUrlTemplate": {
+      "type": "string",
+      "description": "URL template; supports {tenant}, {group}, {apex}."
+    },
+    "unsubscribeUrlTemplate": {
+      "type": "string",
+      "description": "URL template; supports {token}, {apex}."
+    },
+    "adminUrl": { "type": "string", "format": "uri" },
+
+    "additionalReservedSlugs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "minSlugLength": { "type": "integer", "minimum": 1, "default": 3 },
+    "maxSlugLength": { "type": "integer", "minimum": 1, "default": 40 },
+
+    "defaultDailyMessageLimitPerTenant": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1000
+    },
+    "defaultMaxRecipientsPerGroup": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 500
+    },
+
+    "operator": {
+      "type": "object",
+      "required": ["legalName", "mailingAddress", "contactUrl"],
+      "additionalProperties": false,
+      "properties": {
+        "legalName": { "type": "string" },
+        "mailingAddress": { "type": "string", "description": "Required for CAN-SPAM compliance." },
+        "contactUrl": { "type": "string", "format": "uri" }
+      }
+    },
+
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "byoDomainEnabled": { "type": "boolean", "default": false },
+        "publicArchivesAllowed": { "type": "boolean", "default": true },
+        "signupSelfService": { "type": "boolean", "default": false }
+      }
+    }
+  }
+}

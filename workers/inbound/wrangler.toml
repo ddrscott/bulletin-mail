@@ -1,0 +1,42 @@
+# Inbound Worker — Cloudflare Email Routing handler.
+#
+# This file is committed for local development. The [vars] values are
+# intentionally NEUTRAL (example.org) so the no-leakage CI check passes for
+# everyone. For real deployments, run:
+#
+#   pnpm render-wrangler --instance <your-apex>
+#
+# That emits wrangler.generated.toml with the real values from your
+# deployments/<your-apex>/instance.config.json. Deploy with:
+#
+#   pnpm --filter @bulletinmail/inbound deploy
+
+name = "bulletinmail-inbound"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bulletinmail"
+database_id = "PLACEHOLDER_LOCAL_DEV"
+
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "bulletinmail-attachments"
+
+[[queues.producers]]
+binding = "SEND_QUEUE"
+queue = "bulletinmail-send"
+
+[vars]
+INSTANCE_APEX_DOMAIN = "example.org"
+INSTANCE_ADMIN_DOMAIN = "app.example.org"
+INSTANCE_PRODUCT_NAME = "Example Lists"
+INSTANCE_PRODUCT_NAME_SHORT = "Lists"
+INSTANCE_TAGLINE = "Mailing lists for our organization"
+INSTANCE_ARCHIVE_URL = "https://example.org/g/{tenant}/{group}"
+INSTANCE_UNSUB_URL = "https://example.org/u/{token}"
+INSTANCE_ADMIN_URL = "https://app.example.org"
+INSTANCE_OPERATOR_LEGAL_NAME = "Example Org"
+INSTANCE_OPERATOR_MAILING_ADDRESS = "123 Main St, Anytown, US 00000"
+INSTANCE_OPERATOR_CONTACT_URL = "https://example.org/contact"

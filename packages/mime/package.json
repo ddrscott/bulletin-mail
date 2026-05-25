@@ -1,0 +1,25 @@
+{
+  "name": "@bulletinmail/mime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./parse": "./src/parse.ts",
+    "./build": "./src/build.ts",
+    "./threading": "./src/threading.ts",
+    "./subject": "./src/subject.ts",
+    "./assertions": "./src/assertions.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@bulletinmail/db": "workspace:*",
+    "@bulletinmail/shared": "workspace:*",
+    "postal-mime": "^2.2.0"
+  }
+}

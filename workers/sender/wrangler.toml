@@ -1,0 +1,38 @@
+# Sender Worker — Queue consumer. See workers/inbound/wrangler.toml for the
+# committed-vs-generated explanation.
+
+name = "bulletinmail-sender"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bulletinmail"
+database_id = "PLACEHOLDER_LOCAL_DEV"
+
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "bulletinmail-attachments"
+
+[[queues.consumers]]
+queue = "bulletinmail-send"
+max_batch_size = 10
+max_concurrency = 10
+max_retries = 3
+dead_letter_queue = "bulletinmail-send-dlq"
+
+[[send_email]]
+name = "EMAIL"
+
+[vars]
+INSTANCE_APEX_DOMAIN = "example.org"
+INSTANCE_ADMIN_DOMAIN = "app.example.org"
+INSTANCE_PRODUCT_NAME = "Example Lists"
+INSTANCE_PRODUCT_NAME_SHORT = "Lists"
+INSTANCE_TAGLINE = "Mailing lists for our organization"
+INSTANCE_ARCHIVE_URL = "https://example.org/g/{tenant}/{group}"
+INSTANCE_UNSUB_URL = "https://example.org/u/{token}"
+INSTANCE_ADMIN_URL = "https://app.example.org"
+INSTANCE_OPERATOR_LEGAL_NAME = "Example Org"
+INSTANCE_OPERATOR_MAILING_ADDRESS = "123 Main St, Anytown, US 00000"
+INSTANCE_OPERATOR_CONTACT_URL = "https://example.org/contact"

@@ -1,0 +1,10 @@
+{
+  "$comment": "Cloudflare resource handles for this deployment. Account-specific but not secret. Consumed by scripts/render-wrangler.ts to substitute the PLACEHOLDER_LOCAL_DEV values in workers/*/wrangler.toml at render time. Operator-fork deployments add their own resources file alongside their instance.config.json.",
+  "account_id": "0223b96fe77599b23ff8ec7fcd32e2f1",
+  "d1": {
+    "DB": {
+      "database_name": "bulletinmail",
+      "database_id": "b78507ff-84b7-4acc-8f1c-d276a488af3b"
+    }
+  }
+}

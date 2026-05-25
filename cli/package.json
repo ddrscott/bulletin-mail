@@ -1,0 +1,20 @@
+{
+  "name": "@bulletinmail/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "bulletin": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bulletinmail/db": "workspace:*",
+    "@bulletinmail/shared": "workspace:*",
+    "commander": "^12.1.0",
+    "ulidx": "^2.4.0"
+  }
+}

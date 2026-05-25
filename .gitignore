@@ -1,0 +1,24 @@
+node_modules/
+.DS_Store
+._*
+.wrangler/
+dist/
+*.log
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+
+# IDE folders — un-ignore selectively if you want to share editor config.
+.idea/
+.vscode/
+
+# Local-only instance config (operator overrides for dev)
+instance.config.local.json
+
+# Generated wrangler [vars] (rendered from instance.config.json at deploy time)
+workers/*/wrangler.generated.toml
+
+# Test artifacts
+coverage/
+.vitest/

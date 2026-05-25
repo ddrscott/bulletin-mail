@@ -1,0 +1,38 @@
+{
+  "$schema": "../../packages/shared/instance.config.schema.json",
+
+  "apexDomain": "bulletinmail.org",
+  "adminDomain": "app.bulletinmail.org",
+  "productName": "BulletinMail",
+  "productNameShort": "Bulletin",
+  "tagline": "Mailing lists that just work.",
+
+  "supportAddress": "support",
+  "abuseAddress": "abuse",
+  "dmarcAddress": "dmarc",
+  "noreplyAddress": "noreply",
+  "unsubscribeAddressPrefix": "unsubscribe+",
+
+  "archiveUrlTemplate": "https://bulletinmail.org/g/{tenant}/{group}",
+  "unsubscribeUrlTemplate": "https://bulletinmail.org/u/{token}",
+  "adminUrl": "https://app.bulletinmail.org",
+
+  "additionalReservedSlugs": [],
+  "minSlugLength": 3,
+  "maxSlugLength": 40,
+
+  "defaultDailyMessageLimitPerTenant": 1000,
+  "defaultMaxRecipientsPerGroup": 500,
+
+  "operator": {
+    "legalName": "Scott Pierce",
+    "mailingAddress": "TODO: postal address (required for CAN-SPAM footer)",
+    "contactUrl": "https://bulletinmail.org/contact"
+  },
+
+  "features": {
+    "byoDomainEnabled": false,
+    "publicArchivesAllowed": true,
+    "signupSelfService": false
+  }
+}

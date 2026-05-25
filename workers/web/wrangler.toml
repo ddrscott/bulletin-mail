@@ -1,0 +1,51 @@
+# Web Worker — handles ALL HTTP traffic for the instance.
+#
+# Following the same single-Worker / wildcard-route pattern as relaytty.com:
+# one Worker, one route pattern, host-based dispatch inside the handler.
+# Covers:
+#   - apex landing + legal + robots/llms.txt
+#   - /u/:token             (one-click unsubscribe, RFC 8058)
+#   - /g/:tenant/:group     (archive viewer, Phase 2)
+#   - /api/bounce-events    (Email Service webhook)
+#   - app.<apex>/*          (admin app + admin-api, Phase 2)
+#   - <tenant>.<apex>/*     (per-tenant archive, Phase 2)
+#
+# Inbound (email) and sender (queue) stay as separate Workers because they
+# aren't HTTP — Email Routing and Queue invoke them directly.
+#
+# This file is committed for local dev with example.org placeholders. For real
+# deployment, run `pnpm render-wrangler --instance <your-apex>` to emit
+# wrangler.generated.toml with the actual route pattern and zone.
+
+name = "bulletinmail-web"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Single wildcard route: matches the apex AND every subdomain under it.
+# Leading "*" without a dot is intentional — matches "example.org" and any
+# "*.example.org" together. (Same pattern relaytty.com uses.)
+routes = [
+  { pattern = "*example.org/*", zone_name = "example.org" }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bulletinmail"
+database_id = "PLACEHOLDER_LOCAL_DEV"
+
+[observability]
+enabled = true
+
+[vars]
+INSTANCE_APEX_DOMAIN = "example.org"
+INSTANCE_ADMIN_DOMAIN = "app.example.org"
+INSTANCE_PRODUCT_NAME = "Example Lists"
+INSTANCE_PRODUCT_NAME_SHORT = "Lists"
+INSTANCE_TAGLINE = "Mailing lists for our organization"
+INSTANCE_ARCHIVE_URL = "https://example.org/g/{tenant}/{group}"
+INSTANCE_UNSUB_URL = "https://example.org/u/{token}"
+INSTANCE_ADMIN_URL = "https://app.example.org"
+INSTANCE_OPERATOR_LEGAL_NAME = "Example Org"
+INSTANCE_OPERATOR_MAILING_ADDRESS = "123 Main St, Anytown, US 00000"
+INSTANCE_OPERATOR_CONTACT_URL = "https://example.org/contact"
