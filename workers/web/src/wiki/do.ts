@@ -30,12 +30,15 @@
 
 import { DurableObject } from "cloudflare:workers";
 
+export type PageVisibility = "public" | "private";
+
 export type PageRow = {
   id: string;
   slug: string;
   title: string;
   parent_id: string | null;
   current_version_id: string;
+  visibility: PageVisibility;
   updated_at: number;
   created_at: number;
 };
@@ -63,6 +66,7 @@ const SCHEMA_SQL = [
      title               TEXT NOT NULL,
      parent_id           TEXT,
      current_version_id  TEXT NOT NULL,
+     visibility          TEXT NOT NULL DEFAULT 'public',
      updated_at          INTEGER NOT NULL,
      created_at          INTEGER NOT NULL
    )`,
@@ -77,6 +81,17 @@ const SCHEMA_SQL = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_versions_page_created
      ON versions(page_id, created_at DESC)`,
+];
+
+// In-place migrations for DO instances that were created before each column.
+// Each runs once per DO startup; SQLite throws "duplicate column" the second
+// time, which we catch and ignore so the migration is idempotent.
+const COLUMN_MIGRATIONS: Array<{ table: string; column: string; ddl: string }> = [
+  {
+    table: "pages",
+    column: "visibility",
+    ddl: "ALTER TABLE pages ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'",
+  },
 ];
 
 const ulid = (): string => {
@@ -140,6 +155,9 @@ export class TenantWikiDO extends DurableObject {
     if (this.initialized) return;
     const db = this.ctx.storage.sql;
     for (const stmt of SCHEMA_SQL) db.exec(stmt);
+    for (const { ddl } of COLUMN_MIGRATIONS) {
+      try { db.exec(ddl); } catch { /* column already exists */ }
+    }
     this.initialized = true;
   }
 
@@ -149,7 +167,7 @@ export class TenantWikiDO extends DurableObject {
     const db = this.ctx.storage.sql;
     const page = db
       .exec<PageRow>(
-        "SELECT id, slug, title, parent_id, current_version_id, updated_at, created_at FROM pages WHERE slug = ?",
+        "SELECT id, slug, title, parent_id, current_version_id, visibility, updated_at, created_at FROM pages WHERE slug = ?",
         slug,
       )
       .toArray()[0];
@@ -172,7 +190,7 @@ export class TenantWikiDO extends DurableObject {
   listPages(): PageRow[] {
     return this.ctx.storage.sql
       .exec<PageRow>(
-        "SELECT id, slug, title, parent_id, current_version_id, updated_at, created_at FROM pages ORDER BY slug",
+        "SELECT id, slug, title, parent_id, current_version_id, visibility, updated_at, created_at FROM pages ORDER BY slug",
       )
       .toArray();
   }
@@ -219,6 +237,7 @@ export class TenantWikiDO extends DurableObject {
       created_at: now,
     };
 
+    const visibility: PageVisibility = input.visibility === "private" ? "private" : "public";
     let pageId: string;
     if (existing) {
       pageId = existing.id;
@@ -228,8 +247,8 @@ export class TenantWikiDO extends DurableObject {
         versionRow.author_admin_id, versionRow.note, versionRow.created_at,
       );
       db.exec(
-        "UPDATE pages SET title = ?, parent_id = ?, current_version_id = ?, updated_at = ? WHERE id = ?",
-        input.title, input.parentId ?? null, versionId, now, pageId,
+        "UPDATE pages SET title = ?, parent_id = ?, current_version_id = ?, visibility = ?, updated_at = ? WHERE id = ?",
+        input.title, input.parentId ?? null, versionId, visibility, now, pageId,
       );
     } else {
       pageId = ulid();
@@ -239,8 +258,8 @@ export class TenantWikiDO extends DurableObject {
         versionRow.author_admin_id, versionRow.note, versionRow.created_at,
       );
       db.exec(
-        "INSERT INTO pages (id, slug, title, parent_id, current_version_id, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        pageId, slug, input.title, input.parentId ?? null, versionId, now, now,
+        "INSERT INTO pages (id, slug, title, parent_id, current_version_id, visibility, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        pageId, slug, input.title, input.parentId ?? null, versionId, visibility, now, now,
       );
     }
     return { pageId, versionId };
@@ -276,6 +295,7 @@ export class TenantWikiDO extends DurableObject {
 }
 
 export type SavePageInput = {
+  visibility?: PageVisibility;
   slug: string;
   title: string;
   parentId?: string | null;

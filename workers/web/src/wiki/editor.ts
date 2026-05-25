@@ -59,6 +59,7 @@ type EditorOpts = {
 export function renderEditorPage({ tenant, productName, slug, page, versions }: EditorOpts): string {
   const title = page?.title ?? deriveTitleFromSlug(slug);
   const initialMd = page?.md_source ?? defaultBody(slug, title);
+  const initialVisibility = page?.visibility === "private" ? "private" : "public";
   const versionsJson = JSON.stringify(versions.map((v) => ({
     id: v.id, note: v.note, created_at: v.created_at, author_admin_id: v.author_admin_id,
   })));
@@ -82,6 +83,11 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
   .editor-topbar .spacer { flex: 1; }
   .editor-topbar a.view { font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); text-decoration: none; }
   .editor-topbar a.view:hover { color: var(--ink); background: transparent; }
+  .visibility-toggle { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; gap: 2px; }
+  .visibility-toggle label { font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); cursor: pointer; padding: 4px 10px; border-radius: 999px; line-height: 1; }
+  .visibility-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .visibility-toggle input:checked + label { background: var(--ink); color: var(--paper); }
+  .visibility-toggle input[value="private"]:checked + label { background: var(--alert); color: var(--paper); }
   #status-msg { border-radius: 0; margin: 0; }
   .editor-grid { display: grid; grid-template-columns: 1fr 20rem; min-height: calc(100vh - 56px); }
   #editor { border-right: var(--hairline); }
@@ -98,6 +104,12 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
   <input class="title field" id="page-title" value="${esc(title)}" placeholder="Page title">
   <span class="meta">/wiki/${esc(slug)}</span>
   <span class="spacer"></span>
+  <div class="visibility-toggle" role="radiogroup" aria-label="Page visibility">
+    <input type="radio" name="visibility" id="vis-public" value="public"${initialVisibility === "public" ? " checked" : ""}>
+    <label for="vis-public" title="Anyone with the URL can read this page">Public</label>
+    <input type="radio" name="visibility" id="vis-private" value="private"${initialVisibility === "private" ? " checked" : ""}>
+    <label for="vis-private" title="Only your team (admins + moderators) can read this page">Private</label>
+  </div>
   <a class="view" href="/wiki/${esc(slug)}">View</a>
   <button id="save-btn" class="btn btn--primary btn--small">Save</button>
 </div>
@@ -153,12 +165,13 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
   document.getElementById('save-btn').addEventListener('click', async () => {
     const title = document.getElementById('page-title').value.trim() || ${JSON.stringify(deriveTitleFromSlug(slug))};
     const md = editor.getMarkdown();
+    const visibility = (document.querySelector('input[name="visibility"]:checked') || {}).value || 'public';
     try {
       const res = await fetch('/api/wiki/' + encodeURIComponent(slug), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ title, mdSource: md }),
+        body: JSON.stringify({ title, mdSource: md, visibility }),
       });
       if (!res.ok) throw new Error('save failed: ' + res.status);
       const json = await res.json();

@@ -122,10 +122,11 @@ export function mountWikiRoutes(
   app.post("/api/wiki/:slug", (c) => withTenantAdmin(c, async ({ tenant, admin }) => {
     const slug = c.req.param("slug").toLowerCase();
     if (!SLUG_RE.test(slug)) return c.json({ error: "invalid_slug" }, 400);
-    const body = await safeJson<{ title?: string; mdSource?: string; note?: string }>(c.req.raw);
+    const body = await safeJson<{ title?: string; mdSource?: string; note?: string; visibility?: string }>(c.req.raw);
     const title = body?.title?.trim() || slug;
     const mdSource = typeof body?.mdSource === "string" ? body.mdSource : "";
     if (!mdSource) return c.json({ error: "empty_body" }, 400);
+    const visibility = body?.visibility === "private" ? "private" : "public";
 
     const htmlCompiled = compileMarkdown(mdSource);
     const stub = wikiStub(c, tenant);
@@ -134,12 +135,14 @@ export function mountWikiRoutes(
       mdSource, htmlCompiled,
       authorAdminId: admin.id,
       note: body?.note ?? null,
+      visibility,
     };
     const saved = await callDo<{ pageId: string; versionId: string }>(stub, "savePage", input);
 
     // Cache the compiled HTML to R2 — public reads now return immediately
-    // without round-tripping the DO.
-    await writeR2Page(c, tenant.slug, slug, htmlCompiled, title);
+    // without round-tripping the DO. Visibility is stored as metadata so the
+    // read path can gate without going back to the DO.
+    await writeR2Page(c, tenant.slug, slug, htmlCompiled, title, visibility);
     return c.json(saved, 200);
   }));
 
@@ -165,7 +168,7 @@ export function mountWikiRoutes(
     });
     if (!out) return c.json({ error: "revert_failed" }, 500);
     // Re-cache R2 with the reverted HTML.
-    await writeR2Page(c, tenant.slug, slug, ver.html_compiled, page.title);
+    await writeR2Page(c, tenant.slug, slug, ver.html_compiled, page.title, page.visibility);
     return c.json(out);
   }));
 
@@ -270,10 +273,12 @@ async function renderWikiPage(
   let cached = await c.env.WIKI_R2.get(cacheKey);
   let title = "";
   let body = "";
+  let visibility: "public" | "private" = "public";
 
   if (cached) {
     const meta = await c.env.WIKI_R2.head(cacheKey);
     title = meta?.customMetadata?.title ?? slug;
+    visibility = meta?.customMetadata?.visibility === "private" ? "private" : "public";
     body = await cached.text();
   } else {
     const stub = wikiStub(c, tenant);
@@ -281,16 +286,33 @@ async function renderWikiPage(
     if (page) {
       title = page.title;
       body = page.html_compiled;
+      visibility = page.visibility === "private" ? "private" : "public";
       // Warm the cache for next read.
-      await writeR2Page(c, tenant.slug, slug, body, title);
+      await writeR2Page(c, tenant.slug, slug, body, title, visibility);
     }
+  }
+
+  // Visibility gate. Private pages require a tenant session (admin OR
+  // moderator). Browsers hitting a private page unauthenticated land on the
+  // sign-in form with a return_to back to this page; JSON/HEAD callers get
+  // 401 plain.
+  if (visibility === "private" && !admin) {
+    const accept = c.req.header("Accept") ?? "";
+    if (accept.includes("text/html")) {
+      const returnTo = new URL(c.req.url).pathname;
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}` },
+      });
+    }
+    return c.text("unauthorized", 401);
   }
 
   const avatarUrl = admin ? await gravatarAvatarUrlFor(admin.email) : null;
   if (!body) {
     return c.html(renderEmptyPagePlaceholder(tenant, c.var.config.productName, slug, admin, avatarUrl), 200);
   }
-  return c.html(renderWikiShell(tenant, c.var.config.productName, slug, title, body, admin, avatarUrl), 200);
+  return c.html(renderWikiShell(tenant, c.var.config.productName, slug, title, body, admin, avatarUrl, visibility), 200);
 }
 
 async function gravatarAvatarUrlFor(email: string, size = 48): Promise<string> {
@@ -304,10 +326,11 @@ async function writeR2Page(
   slug: string,
   html: string,
   title: string,
+  visibility: "public" | "private" = "public",
 ): Promise<void> {
   await c.env.WIKI_R2.put(`wiki/${tenantSlug}/${slug}.html`, html, {
     httpMetadata: { contentType: "text/html; charset=utf-8" },
-    customMetadata: { title },
+    customMetadata: { title, visibility },
   });
 }
 
@@ -319,6 +342,7 @@ function renderWikiShell(
   bodyHtml: string,
   admin: Admin | null,
   avatarUrl: string | null,
+  visibility: "public" | "private" = "public",
 ): string {
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
   const isEditor = admin !== null;
@@ -360,6 +384,8 @@ function renderWikiShell(
 <title>${esc(title)} — ${esc(tenant.display_name)}</title>
 <link rel="stylesheet" href="/admin/styles.css">
 <style>
+  .visibility-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rule); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; }
+  .visibility-badge--private { background: var(--paper-2); color: var(--alert); border-color: var(--alert); }
   main.wiki-main { max-width: var(--width-prose); margin: 0 auto; padding: var(--space-6) 0 var(--space-9); }
   main.wiki-main > h1:first-child { margin-top: 0; }
   main.wiki-main a.wiki-link { border-bottom: 1px dashed currentColor; text-decoration: none; }
@@ -388,7 +414,7 @@ function renderWikiShell(
   </header>
   <div class="dateline dateline--row">
     <div class="dateline__nav">
-      <a href="/">Wiki</a>
+      <a href="/">Wiki</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}
     </div>
     ${rightCell}
   </div>
