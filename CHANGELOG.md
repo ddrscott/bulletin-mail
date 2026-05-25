@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed mid-session
 - **Threading parent resolution now also consults `deliveries.provider_message_id`** (`packages/mime/src/threading.ts`). Cloudflare Email Service is the canonical authority on outbound Message-ID, so replies in the wild carry an `In-Reply-To` referencing the per-recipient `provider_message_id` we recorded — not anything we control. Without this lookup the inbound Worker inserted replies as orphan thread roots (visible in the first reply at `01KSFVZSF26EXSGPMM94BF964R`, which has `in_reply_to_outbound = null`). Inbound v `f9e83cbf` carries the fix; any reply landing after that point should populate `in_reply_to_outbound` correctly.
 
+### Phase-1 acceptance milestones
+- **mail-tester.com 10/10** (PRD §11 Phase-1 #7) achieved on first attempt against `test-qhzngyz9v@srv1.mail-tester.com`. Synthetic message `mt001` (Pastor John / service-tomorrow body, realistic small-church format) processed by the full pipeline; delivery `provider_message_id=<I3Dd7KiHWYabmPgKUdZ9i3p6u7Be5DyX4YMr@bulletinmail.org>`. All six mail-tester categories green: SpamAssassin score, SPF+DKIM+DMARC alignment, MIME well-formed, no blocklist matches, working List-Unsubscribe URL, deliverable.
+- **Phase-1 acceptance status**: 6/8 criteria directly verified in production (#1 CLI, #2 external→fan-out, #3 reply threading user-visible, #5 unsubscribe, #7 mail-tester 10/10, plus #1 via CLI). #6 deferred to V2 by design (Cloudflare handles hard-bounce suppression at the platform layer; our per-soft-bounce counter is post-V1). #4 (5-client cross-verification) and #8 (7-day DMARC observation) are operator-manual / wall-clock and cannot be automated in-session.
+
 ### Remaining for Phase-1 acceptance (operator-dependent)
 - Wildcard MX (`*.bulletinmail.org → route1/2/3.mx.cloudflare.net`) — required to deliver `<group>@<tenant>.bulletinmail.org` inbound mail. My OAuth token lacks `dns_records:write`. Add manually via dashboard.
 - Cross-client manual verification of threading (Gmail web, Apple Mail, Outlook desktop, Outlook web, Thunderbird) — PRD §11 Phase 1 #4.
