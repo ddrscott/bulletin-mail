@@ -16,5 +16,8 @@
     "@bulletinmail/shared": "workspace:*",
     "commander": "^12.1.0",
     "ulidx": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.0"
   }
 }
