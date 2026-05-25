@@ -24,7 +24,7 @@ You'll use BulletinMail's source largely unmodified. Everything specific to your
 ## 1. Clone the repo and install dependencies
 
 ```sh
-git clone https://github.com/OWNER/bulletinmail.git
+git clone https://github.com/ddrscott/bulletin-mail.git
 cd bulletinmail
 pnpm install
 ```

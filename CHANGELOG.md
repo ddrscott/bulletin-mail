@@ -60,4 +60,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mail-tester.com 10/10 — operator fetches a real disposable address from the site and sends from any tenant address; we send + check the score.
 - 7-day DMARC observation — wall-clock dependent; check `dmarc@bulletinmail.org` after 7 days for the first aggregate reports.
 
-[Unreleased]: https://github.com/OWNER/bulletinmail/compare/HEAD
+[Unreleased]: https://github.com/ddrscott/bulletin-mail/compare/HEAD

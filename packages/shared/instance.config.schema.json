@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/OWNER/bulletinmail/blob/main/packages/shared/instance.config.schema.json",
+  "$id": "https://github.com/ddrscott/bulletin-mail/blob/main/packages/shared/instance.config.schema.json",
   "title": "InstanceConfig",
   "description": "Per-deployment configuration for a BulletinMail instance. See PRD §20.",
   "type": "object",

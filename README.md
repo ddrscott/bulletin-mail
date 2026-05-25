@@ -55,7 +55,7 @@ The separation between generic code and per-instance overlay is enforced by `scr
 ## Quick start (development)
 
 ```sh
-git clone https://github.com/OWNER/bulletinmail.git
+git clone https://github.com/ddrscott/bulletin-mail.git
 cd bulletinmail
 pnpm install
 cp instance.config.example.json instance.config.local.json

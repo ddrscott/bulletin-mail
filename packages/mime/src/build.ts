@@ -45,7 +45,7 @@ export type SendEmailPayload = {
 
 export type BuiltOutbound = {
   payload: SendEmailPayload;
-  outboundMessageId: string;            // e.g. "abc@firstpresby.bulletinmail.org" (with brackets in header)
+  outboundMessageId: string;            // e.g. "abc@firstpresby.example.org" (with brackets in header)
   fromDomain: string;                   // for assertOutboundValid
 };
 
@@ -80,7 +80,7 @@ export function buildOutbound(input: OutboundBuildInput): BuiltOutbound {
 
   // From-header rewrite — see PRD §9.1. The display name carries the tenant
   // identity so recipients see e.g.:
-  //   "Pastor John via Demo Announcements" <demo-announcements@bulletinmail.org>
+  //   "Pastor John via Demo Announcements" <demo-announcements@example.org>
   // while replies land on the subdomain list address via Reply-To.
   const senderDisplay = message.from_name?.trim() || message.from_email;
   const fromHeader = formatNameAddr(

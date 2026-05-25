@@ -8,7 +8,7 @@
   "homepage": "https://bulletinmail.org",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/bulletinmail.git"
+    "url": "git+https://github.com/ddrscott/bulletin-mail.git"
   },
   "packageManager": "pnpm@9.12.0",
   "engines": {
