@@ -11,7 +11,7 @@ cp -R deployments/bulletinmail.org deployments/<your-apex>
 
 Your deployment script will read `deployments/<your-apex>/instance.config.json` instead of this one.
 
-See [`docs/self-hosting.md`](../../docs/self-hosting.md) for the full operator setup, and PRD §19 / §20 for the rationale behind the three-layer separation.
+See [`docs/how-to/self-host.md`](../../docs/how-to/self-host.md) for the full operator setup, and PRD §19 / §20 for the rationale behind the three-layer separation.
 
 ## Files
 

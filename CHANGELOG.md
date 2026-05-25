@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Open-source distribution model and `InstanceConfig` manifest (PRD §19, §20).
 - Repository scaffold: workspace root, packages (`shared`, `db`, `mime`), worker stubs, CLI stub.
 - Reference deployment overlay at `deployments/bulletinmail.org/`.
-- Self-hosting guide (`docs/self-hosting.md`).
+- Self-hosting guide (`docs/how-to/self-host.md`).
 - Single-Worker HTTP routing (PRD §6.5): `workers/web/` handles apex + admin + every tenant subdomain via one wildcard route, host-dispatched in code (relaytty.com pattern). Includes `classifyHost` helper in `@bulletinmail/shared` and route stubs for unsubscribe, bounce-events, archive, admin, and per-tenant catch-all.
 
 ### Changed
@@ -49,6 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed mid-session
 - **Threading parent resolution now also consults `deliveries.provider_message_id`** (`packages/mime/src/threading.ts`). Cloudflare Email Service is the canonical authority on outbound Message-ID, so replies in the wild carry an `In-Reply-To` referencing the per-recipient `provider_message_id` we recorded — not anything we control. Without this lookup the inbound Worker inserted replies as orphan thread roots (visible in the first reply at `01KSFVZSF26EXSGPMM94BF964R`, which has `in_reply_to_outbound = null`). Inbound v `f9e83cbf` carries the fix; any reply landing after that point should populate `in_reply_to_outbound` correctly.
+
+### Documentation
+- `docs/` reorganized following the [Diataxis](https://diataxis.fr/) framework into `tutorial/`, `how-to/`, `reference/`, `explanation/` quadrants. Existing pages moved into the appropriate quadrants; new explanation pages distilled from PRD §6 (domain strategy), §6.5 (HTTP routing), §19 (distribution model); new reference pages for `InstanceConfig` and the `bulletin` CLI. `docs/README.md` is the navigation index.
 
 ### Phase-1 acceptance milestones
 - **mail-tester.com 10/10** (PRD §11 Phase-1 #7) achieved on first attempt against `test-qhzngyz9v@srv1.mail-tester.com`. Synthetic message `mt001` (Pastor John / service-tomorrow body, realistic small-church format) processed by the full pipeline; delivery `provider_message_id=<I3Dd7KiHWYabmPgKUdZ9i3p6u7Be5DyX4YMr@bulletinmail.org>`. All six mail-tester categories green: SpamAssassin score, SPF+DKIM+DMARC alignment, MIME well-formed, no blocklist matches, working List-Unsubscribe URL, deliverable.

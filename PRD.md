@@ -923,7 +923,7 @@ Resolved 2026-05-25 via Cloudflare developer docs (links inline). Items 1, 2, 3,
 
 6. **Outbound sender-domain authorization — RESOLVED (with workaround).** Verified empirically 2026-05-25: enabling Email Routing on `bulletinmail.org` authorizes sends only from `*@bulletinmail.org`, NOT from `*@<slug>.bulletinmail.org`. The Worker binding throws `Error: email sending not authorized for subdomain 'demo.bulletinmail.org'`. **Adopted workaround** (per the rejected-alternative escape hatch in §6): outbound `From` is `<tenant_slug>-<group>@<apex>` (slug-prefix on the local-part) while inbound `Reply-To` and `List-Post` remain on the tenant subdomain (`<group>@<slug>.<apex>`) where Email Routing's catch-all handles them. Code lives in `packages/mime/src/build.ts` (constants `outboundFromAddress` vs `inboundGroupAddress`). DMARC alignment is preserved — From-domain is the apex, which we DKIM-sign.
 
-7. **SPF-record conflict blocks Email Routing enable (operational gotcha).** Discovered 2026-05-25 attempting to enable Email Routing on `bulletinmail.org`: the API returns `2026 Multiple SPF records exist` because the zone has two pre-existing SPF TXT records (`v=spf1 -all` and `v=spf1 ~all`, likely added by Cloudflare Registrar defaults). Email Routing refuses to proceed until exactly zero SPF records exist on the apex. Operator action required: delete every `v=spf1 ...` TXT record on the apex via the dashboard before clicking "Enable Email Routing" — Cloudflare then adds its own correct SPF. Documented in `docs/self-hosting.md` step 5.
+7. **SPF-record conflict blocks Email Routing enable (operational gotcha).** Discovered 2026-05-25 attempting to enable Email Routing on `bulletinmail.org`: the API returns `2026 Multiple SPF records exist` because the zone has two pre-existing SPF TXT records (`v=spf1 -all` and `v=spf1 ~all`, likely added by Cloudflare Registrar defaults). Email Routing refuses to proceed until exactly zero SPF records exist on the apex. Operator action required: delete every `v=spf1 ...` TXT record on the apex via the dashboard before clicking "Enable Email Routing" — Cloudflare then adds its own correct SPF. Documented in `docs/how-to/self-host.md` step 5.
 
 ---
 
@@ -1047,7 +1047,7 @@ export type InstanceConfig = {
 Each operator must do, once per deployment, with their own credentials:
 
 1. Register and configure the apex domain in their own Cloudflare zone.
-2. Apply DNS records (MX wildcard + apex, SPF, DKIM, DMARC) — template in `docs/self-hosting.md`.
+2. Apply DNS records (MX wildcard + apex, SPF, DKIM, DMARC) — template in `docs/how-to/self-host.md`.
 3. Create D1 database, R2 bucket, send Queue, dead-letter Queue (commands documented).
 4. Provision the Email Sending binding for the zone.
 5. `wrangler secret put` for `ADMIN_API_JWT_SECRET` and `UNSUB_TOKEN_PEPPER`.

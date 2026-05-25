@@ -8,7 +8,7 @@ BulletinMail lets a volunteer church administrator create a list in 60 seconds a
 
 **Hosted at [bulletinmail.org](https://bulletinmail.org)** — the reference instance, run by the project maintainer. Free tier for small congregations; paid tier for bring-your-own-domain.
 
-**Self-host your own instance** — point your own apex domain at Cloudflare, follow [`docs/self-hosting.md`](docs/self-hosting.md), and run BulletinMail under your own brand on your own Cloudflare account. The whole stack fits comfortably in Cloudflare's free / low tier for small-org use.
+**Self-host your own instance** — point your own apex domain at Cloudflare, follow [`docs/how-to/self-host.md`](docs/how-to/self-host.md), and run BulletinMail under your own brand on your own Cloudflare account. The whole stack fits comfortably in Cloudflare's free / low tier for small-org use.
 
 ## Why it works
 
@@ -45,7 +45,7 @@ bulletinmail/
 ├── cli/                     # operator CLI (create-tenant, add-member, ...)
 ├── deployments/
 │   └── bulletinmail.org/    # reference-instance overlay; your fork adds a sibling
-├── docs/                    # self-hosting, operations, architecture
+├── docs/                    # Diataxis-organized (tutorial/how-to/reference/explanation)
 ├── scripts/                 # render-wrangler, db-migrate, CI checks
 └── PRD.md                   # full product + architecture design doc
 ```
@@ -66,7 +66,7 @@ pnpm dev:sender   # in another
 
 ## Quick start (self-hosting in production)
 
-See [`docs/self-hosting.md`](docs/self-hosting.md). High level:
+See [`docs/how-to/self-host.md`](docs/how-to/self-host.md). The [`docs/`](docs/) directory has the rest of the documentation, organized by [Diataxis](https://diataxis.fr/). High level for self-hosting:
 
 1. Register an apex domain and add it to your Cloudflare account.
 2. Add DNS records (MX wildcard + apex, SPF, DKIM, DMARC) — templates in the guide.

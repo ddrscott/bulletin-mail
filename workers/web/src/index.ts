@@ -1,7 +1,7 @@
 /**
  * Web Worker — single HTTP entry for the whole instance.
  *
- * Pattern (mirrors relaytty.com — see docs/architecture.md):
+ * Pattern (mirrors relaytty.com — see docs/explanation/http-routing.md):
  *   1. wrangler.toml declares one route: `*<apex>/*` matches apex AND every
  *      subdomain. There is no per-subdomain config to maintain.
  *   2. This handler classifies the request by Host (apex / admin / tenant)
