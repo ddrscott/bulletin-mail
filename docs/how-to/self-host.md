@@ -265,7 +265,7 @@ Set up DMARC report ingestion: aggregate reports will land at `dmarc@<your-apex>
 - **Suspending a tenant:** `pnpm cli ... ` *(Phase 1)* or set `tenants.status = 'suspended'` in D1.
 - **Adding new reserved subdomains later:** edit `deployments/<your-apex>/instance.config.json`'s `additionalReservedSlugs`, re-render, re-deploy. Existing tenants on those subdomains are not affected.
 
-See [`docs/operations.md`](operations.md) for the operator runbook.
+See [`operations.md`](operations.md) for the operator runbook.
 
 ---
 
