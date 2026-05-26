@@ -25,9 +25,9 @@
   "defaultMaxRecipientsPerGroup": 500,
 
   "operator": {
-    "legalName": "Scott Pierce",
-    "mailingAddress": "TODO: postal address (required for CAN-SPAM footer)",
-    "contactUrl": "https://bulletinmail.org/contact"
+    "legalName": "Left Join Studio, Inc.",
+    "mailingAddress": "2501 Chatham Rd, Springfield, IL 62704",
+    "contactUrl": "https://bulletinmail.org/legal/privacy/"
   },
 
   "features": {

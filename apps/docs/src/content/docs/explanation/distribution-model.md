@@ -68,9 +68,27 @@ A few common questions and which layer answers each:
 
 ## Trademark, separately
 
-The AGPL covers **code only**. The name "BulletinMail," the wordmark, and `bulletinmail.org` are trademarks of the project maintainer. Anyone running a service under a different name from a fork is welcome; running a service under the BulletinMail name from a fork is not. Same as Mattermost's "unbranded build" rule.
+The AGPL covers **code only**. The name "BulletinMail," the wordmark, and `bulletinmail.org` are trademarks of [Left Join Studio, Inc.](https://leftjoin.studio) Anyone running a service under a different name from a fork is welcome; running a service under the BulletinMail name from a fork is not. Same as Mattermost's "unbranded build" rule.
 
 Self-hosting under your own brand or no brand at all is fine, and is what the architecture is designed for.
+
+## Liability lies with the host
+
+A fork is not a customer relationship. **Whoever deploys the BulletinMail software is the operator of that deployment** and assumes all responsibility for it — data handling, deliverability, abuse complaints, regulatory compliance, and end-user relationships. This is true regardless of business model:
+
+- A church running its own copy for its membership: the church is the operator.
+- A regional nonprofit collective hosting a shared instance for member orgs: the collective is the operator.
+- A commercial provider charging tenants for managed BulletinMail: the commercial provider is the operator.
+
+In all three cases, Left Join Studio, Inc. and the upstream contributors:
+
+- Provide the software **AS IS** under AGPL-3.0-only, with no warranty of any kind.
+- Have no service-level obligation, support obligation, or indemnity duty to the host or to the host's users.
+- Are not party to the host's Terms of Service or Privacy Notice — the host must publish their own under their own legal name and address.
+
+The `operator` block in `instance.config.json` exists exactly so this stays unambiguous: every outbound bulletin's CAN-SPAM footer carries the deploying entity's legal name and postal address, not LJS's. See [Self-host §15](/how-to/self-host/#15-legal--operator-identity) for the operator's checklist.
+
+Commercial use of the software is **permitted** under the AGPL (with the source-publication obligation kicking in if you offer it as a service). It is also **squarely the operator's risk**.
 
 ## Governance (V1)
 

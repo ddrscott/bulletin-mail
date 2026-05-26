@@ -5,9 +5,14 @@ template: doc
 tableOfContents: false
 ---
 
+:::note[Scope]
+This notice applies **only** to the reference instance hosted at `bulletinmail.org`, operated by Left Join Studio, Inc. If you are a subscriber on a list run by a fork of BulletinMail, your data is handled by that fork's operator — not by LJS. See [Self-host](/how-to/self-host/) §15.
+:::
+
 **Effective:** May 26, 2026
 **Service:** BulletinMail at `bulletinmail.org`
 **Provider:** Left Join Studio, Inc. ("LJS")
+**Mailing address:** 2501 Chatham Rd, Springfield, IL 62704
 
 ## The short version
 

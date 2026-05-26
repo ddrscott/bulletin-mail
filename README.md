@@ -83,6 +83,8 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Commits must be DCO-signed (`git commi
 
 [AGPL-3.0-only](LICENSE). The name **BulletinMail** and `bulletinmail.org` are trademarks of [Left Join Studio, Inc.](https://leftjoin.studio) — forks that run BulletinMail as a service must rebrand. Self-hosting under your own brand (or no brand at all) is fine.
 
+**The software is provided AS IS, with no warranty.** Anyone who deploys BulletinMail is the operator of that deployment and assumes all responsibility for it — data handling, deliverability, regulatory compliance, and subscriber relationships — whether they run it for one organization, a community, or a commercial for-profit service. LJS and other contributors carry no liability for third-party deployments. See [`docs/explanation/distribution-model.md`](docs/explanation/distribution-model.md) for the full rationale and [`docs/how-to/self-host.md`](docs/how-to/self-host.md) §15 for the operator checklist.
+
 ---
 
 *Built for the small organizations who shouldn't need a sysadmin to send announcements.*

@@ -5,9 +5,14 @@ template: doc
 tableOfContents: false
 ---
 
+:::note[Scope]
+These Terms apply **only** to the reference instance hosted at `bulletinmail.org`, operated by Left Join Studio, Inc. If you run your own fork of the BulletinMail software, these Terms do not apply to your instance — you are the operator and must publish your own. See [Self-host](/how-to/self-host/) §15.
+:::
+
 **Effective:** May 26, 2026
 **Service:** BulletinMail at `bulletinmail.org`
 **Provider:** Left Join Studio, Inc. ("LJS"), an Illinois corporation
+**Mailing address:** 2501 Chatham Rd, Springfield, IL 62704
 
 ## What BulletinMail is
 
@@ -55,6 +60,16 @@ Your member data belongs to you. See the [Privacy Notice](/legal/privacy/) for h
 BulletinMail's source code is published under [AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0.html). You are free to fork and self-host. If you run a modified version as a service for third parties, the AGPL requires you to publish your modifications.
 
 The names *BulletinMail* and *Left Join Studio*, and the apex `bulletinmail.org`, are trademarks of Left Join Studio, Inc. Forks redistributing the software as a service must rename.
+
+## Third-party deployments
+
+These Terms govern only the LJS-operated instance at `bulletinmail.org`. **Anyone else who deploys the BulletinMail software** — whether for an organization's internal use, as a free community service, or as a commercial for-profit offering — **is the sole operator of that deployment.** That operator:
+
+- Assumes full responsibility and liability for their instance, including all data handling, deliverability, compliance, and end-user relationships.
+- Must publish their own Terms of Service and Privacy Notice under their own legal name. The pages on `bulletinmail.org/legal/` may not be reproduced verbatim by a third-party operator.
+- Receives no warranty, indemnity, support, or service commitment from LJS or any other contributor by virtue of having forked or deployed the software.
+
+LJS is not a party to, and bears no liability arising from, any third-party deployment of the BulletinMail software — for-profit or otherwise.
 
 ## Changes to these Terms
 

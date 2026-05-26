@@ -25,9 +25,9 @@
   "defaultMaxRecipientsPerGroup": 500,
 
   "operator": {
-    "legalName": "Example Org",
-    "mailingAddress": "123 Main St, Anytown, US 00000",
-    "contactUrl": "https://example.org/contact"
+    "legalName": "REPLACE: legal name of the entity operating this instance",
+    "mailingAddress": "REPLACE: street address (required for CAN-SPAM footer in outbound mail)",
+    "contactUrl": "REPLACE: https://<your-apex>/contact"
   },
 
   "features": {
