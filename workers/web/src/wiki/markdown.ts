@@ -18,30 +18,33 @@
 
 import { Marked } from "marked";
 
-const wikiLinkExtension = {
-  name: "wikiLink",
-  level: "inline" as const,
-  start(src: string): number | undefined {
-    const idx = src.indexOf("[[");
-    return idx === -1 ? undefined : idx;
-  },
-  tokenizer(src: string) {
-    const match = /^\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]/.exec(src);
-    if (!match) return undefined;
-    const target = match[1]!.trim();
-    const text = (match[2] ?? target).trim();
-    return {
-      type: "wikiLink",
-      raw: match[0],
-      target,
-      text,
-    };
-  },
-  renderer(token: { target: string; text: string }) {
-    const slug = slugify(token.target);
-    return `<a href="/wiki/${escapeAttr(slug)}" class="wiki-link" data-wiki-target="${escapeAttr(token.target)}">${escapeText(token.text)}</a>`;
-  },
-};
+/**
+ * Convert `[[Page]]` / `[[Page|Label]]` to inline HTML anchors BEFORE marked
+ * sees the source. We tried marked's extension API for this; the extension
+ * registered cleanly under vitest in Node but never fired under the Worker
+ * runtime — bracket pairs reached the HTML output untransformed. A regex
+ * preprocess sidesteps marked's extension machinery entirely; marked then
+ * passes the resulting inline `<a>` tag through as inline HTML.
+ *
+ * Targets that resolve to non-existent pages still render — readers get a
+ * link that 404s, MediaWiki-style red links, until someone creates the page.
+ */
+function preprocessWikiLinks(md: string): string {
+  // Each bracket has an OPTIONAL leading backslash because Milkdown Crepe
+  // escapes opening `[` but leaves closing `]` bare (asymmetric). Treating
+  // every bracket as optionally-escaped also covers the symmetric form some
+  // other serializers emit.
+  return md.replace(
+    /\\?\[\\?\[([^\]\n|]+?)(?:\|([^\]\n]+?))?\\?\]\\?\]/g,
+    (_match, rawTarget: string, rawLabel: string | undefined) => {
+      const target = rawTarget.trim();
+      if (!target) return _match;
+      const slug = slugify(target);
+      const text = (rawLabel ?? target).trim();
+      return `<a href="/wiki/${escapeAttr(slug)}" class="wiki-link" data-wiki-target="${escapeAttr(target)}">${escapeText(text)}</a>`;
+    },
+  );
+}
 
 const embedExtension = {
   name: "embed",
@@ -69,7 +72,7 @@ const marked = new Marked({
   breaks: false,
 });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-marked.use({ extensions: [wikiLinkExtension as any, embedExtension as any] });
+marked.use({ extensions: [embedExtension as any] });
 
 // Override the default link + image renderers to drop dangerous schemes.
 marked.use({
@@ -91,7 +94,17 @@ marked.use({
 
 /** Render markdown to HTML. Pure / synchronous (marked is sync when not async). */
 export function compileMarkdown(markdownSource: string): string {
-  const result = marked.parse(markdownSource, { async: false });
+  // ProseMirror-based editors (Milkdown Crepe) escape `[` and `]` in their
+  // serialized output because those characters open standard markdown link
+  // syntax. Undo the escaping for the wiki-link pattern before processing.
+  const unescaped = markdownSource.replace(
+    /\\\[\\\[([^\n\]]+?)\\\]\\\]/g,
+    "[[$1]]",
+  );
+  // Transform [[Page]] / [[Page|Label]] into inline <a> HTML BEFORE marked
+  // sees the source — see preprocessWikiLinks comment for why.
+  const withLinks = preprocessWikiLinks(unescaped);
+  const result = marked.parse(withLinks, { async: false });
   return typeof result === "string" ? result : "";
 }
 

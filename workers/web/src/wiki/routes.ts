@@ -345,38 +345,11 @@ function renderWikiShell(
   visibility: "public" | "private" = "public",
 ): string {
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-  const isEditor = admin !== null;
 
-  // Right-side dateline cell. Editor gets the admin-SPA user menu; visitors
-  // get a "Moderator sign-in" link.
-  let rightCell: string;
-  if (admin && avatarUrl) {
-    const triggerLabel = (admin.display_name ?? admin.email) || "Account";
-    const roleLabel = admin.role === "admin" ? "Tenant admin" : "Moderator";
-    rightCell = `<details class="user-menu">
-  <summary class="user-menu__trigger" aria-label="${esc(triggerLabel)}">
-    <img class="avatar" src="${esc(avatarUrl)}" alt="" width="24" height="24">
-    <span class="user-menu__caret" aria-hidden="true">▾</span>
-  </summary>
-  <div class="user-menu__panel" role="menu">
-    <div class="user-menu__meta">
-      <strong>${esc(admin.display_name ?? admin.email)}</strong><br>
-      ${esc(admin.email)}<br>
-      ${esc(roleLabel)} · ${esc(tenant.display_name)}
-    </div>
-    <a class="user-menu__item" href="/admin/#/profile">Profile</a>
-    <div class="user-menu__section">Manage</div>
-    <a class="user-menu__item" href="/admin/">Admin home</a>
-    <a class="user-menu__item" href="/wiki/${esc(slug)}/edit">Edit page</a>
-    <form method="post" action="/auth/sign-out" style="margin:0">
-      <button type="submit" class="user-menu__item user-menu__item--danger" style="text-align:left;width:100%">Sign out</button>
-    </form>
-  </div>
-</details>`;
-  } else {
-    rightCell = `<a href="/auth/sign-in">Moderator sign-in</a>`;
-  }
-  void isEditor; // edit link now lives in the user menu, not the dateline
+  // Right-side masthead element. Editor gets the admin-SPA user menu;
+  // visitors get a "Moderator sign-in" link. Lives in the masthead's right
+  // grid column — parallel to the admin SPA's renderMasthead().
+  const userMenuHtml = renderWikiUserMenu(admin, avatarUrl, tenant, slug, esc);
 
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8">
@@ -411,17 +384,61 @@ function renderWikiShell(
       <span class="wordmark__kicker">Bulletinmail</span>
       <a href="/">${esc(tenant.display_name)}</a>
     </h1>
+    ${userMenuHtml}
   </header>
   <div class="dateline dateline--row">
     <div class="dateline__nav">
       <a href="/">Wiki</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}
     </div>
-    ${rightCell}
   </div>
   <main class="wiki-main">${bodyHtml}</main>
   <footer class="wiki-footer"><a href="/">Home</a> · Powered by ${esc(productName)}</footer>
 </div>
 </body></html>`;
+}
+
+/**
+ * Render the wiki masthead's right-slot element: the moderator user menu
+ * for signed-in editors, or a "Moderator sign-in" link for visitors.
+ *
+ * Parallels apps/admin/src/views/masthead.ts#renderUserMenu — both produce
+ * the same `.user-menu` DOM structure. Kept duplicated because the wiki is
+ * server-rendered HTML strings while the admin app builds DOM nodes at
+ * runtime; the CSS in packages/shared/design/components.css is the shared
+ * contract.
+ */
+function renderWikiUserMenu(
+  admin: Admin | null,
+  avatarUrl: string | null,
+  tenant: Tenant,
+  slug: string,
+  esc: (s: string) => string,
+): string {
+  if (!admin || !avatarUrl) {
+    return `<a class="masthead__right" href="/auth/sign-in">Moderator sign-in</a>`;
+  }
+  const triggerLabel = (admin.display_name ?? admin.email) || "Account";
+  const roleLabel = admin.role === "admin" ? "Tenant admin" : "Moderator";
+  return `<details class="user-menu">
+  <summary class="user-menu__trigger" aria-label="${esc(triggerLabel)}">
+    <img class="avatar" src="${esc(avatarUrl)}" alt="" width="24" height="24">
+    <span class="user-menu__caret" aria-hidden="true">▾</span>
+  </summary>
+  <div class="user-menu__panel" role="menu">
+    <div class="user-menu__meta">
+      <strong>${esc(admin.display_name ?? admin.email)}</strong><br>
+      ${esc(admin.email)}<br>
+      ${esc(roleLabel)} · ${esc(tenant.display_name)}
+    </div>
+    <a class="user-menu__item" href="/admin/#/profile">Profile</a>
+    <div class="user-menu__section">Manage</div>
+    <a class="user-menu__item" href="/admin/">Admin home</a>
+    <a class="user-menu__item" href="/wiki/${esc(slug)}/edit">Edit page</a>
+    <form method="post" action="/auth/sign-out" style="margin:0">
+      <button type="submit" class="user-menu__item user-menu__item--danger" style="text-align:left;width:100%">Sign out</button>
+    </form>
+  </div>
+</details>`;
 }
 
 function renderEmptyPagePlaceholder(

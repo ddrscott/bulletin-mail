@@ -12,6 +12,7 @@ dist/
 # IDE folders — un-ignore selectively if you want to share editor config.
 .idea/
 .vscode/
+.claude/
 
 # Local-only instance config (operator overrides for dev)
 instance.config.local.json

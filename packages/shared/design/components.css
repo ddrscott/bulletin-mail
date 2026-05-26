@@ -84,9 +84,9 @@ hr {
  * Masthead
  * ------------------------------------------------------------------------- */
 .masthead {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-5) 0 var(--space-2);
   border-bottom: var(--rule-mast);
@@ -110,6 +110,13 @@ hr {
   font-size: var(--text-sm);
   color: var(--ink-muted);
   white-space: nowrap;
+}
+/* When the user menu lives in the masthead, the flexbox's space-between
+ * already pushes it to the far right. The `margin-inline-start: auto`
+ * fallback ensures the same outcome if a third child is ever added. */
+.masthead > .user-menu,
+.masthead > .masthead__right {
+  margin-inline-start: auto;
 }
 
 .dateline {

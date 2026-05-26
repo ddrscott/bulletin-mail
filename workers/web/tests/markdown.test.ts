@@ -13,6 +13,28 @@ describe("compileMarkdown — wiki links", () => {
     expect(html).toContain('href="/wiki/getting-started"');
     expect(html).toContain(">the intro</a>");
   });
+
+  it("normalizes escaped \\[\\[Page\\]\\] from ProseMirror serializers", () => {
+    // Milkdown Crepe emits backslash-escaped brackets to keep them out of
+    // markdown link syntax. The compile step should still detect wiki links.
+    const html = compileMarkdown("See \\[\\[Getting Started\\]\\] for details.");
+    expect(html).toContain('href="/wiki/getting-started"');
+    expect(html).toContain("Getting Started</a>");
+  });
+
+  it("normalizes escaped \\[\\[Page|Label\\]\\] with custom label", () => {
+    const html = compileMarkdown("See \\[\\[Getting Started|the intro\\]\\].");
+    expect(html).toContain('href="/wiki/getting-started"');
+    expect(html).toContain(">the intro</a>");
+  });
+
+  it("handles asymmetric escape \\[\\[Page]] (open escaped, close bare)", () => {
+    // Milkdown Crepe emits this exact form: opening brackets escaped,
+    // closing brackets bare. Live debugging confirmed via /api/wiki/:slug/versions.
+    const html = compileMarkdown("Link out: \\[\\[About]], \\[\\[Contact]].");
+    expect(html).toContain('href="/wiki/about"');
+    expect(html).toContain('href="/wiki/contact"');
+  });
 });
 
 describe("compileMarkdown — image safety", () => {

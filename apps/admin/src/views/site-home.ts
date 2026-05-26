@@ -9,9 +9,10 @@
  * site-admin shell reads as a sibling of the tenant-admin shell.
  */
 
-import { h, mount, fmtDate, currentApex, gravatarImg } from "../dom.js";
+import { h, mount, fmtDate, currentApex } from "../dom.js";
 import { api, HttpError } from "../api.js";
 import type { SiteMe } from "../api.js";
+import { renderMasthead, renderUserMenu, signOutItem } from "./masthead.js";
 
 export function renderSiteHome(root: HTMLElement, me: SiteMe): void {
   let tenants = me.tenants;
@@ -31,49 +32,24 @@ export function renderSiteHome(root: HTMLElement, me: SiteMe): void {
   const draw = () => {
     const apex = currentApex();
 
-    const masthead = h("header", { class: "masthead" },
-      h("h1", { class: "wordmark" },
-        h("a", { href: "/" }, "BULLETINMAIL"),
-      ),
-    );
+    const userMenu = renderUserMenu({
+      email: me.siteAdmin.email,
+      displayName: me.siteAdmin.displayName,
+      metaLines: [me.siteAdmin.email, "Site admin"],
+      items: [
+        { kind: "link", href: "#/profile", label: "Profile" },
+        signOutItem(),
+      ],
+    });
 
-    const signOutBtn = h("button", {
-      class: "user-menu__item user-menu__item--danger",
-      type: "button",
-      onclick: async (ev: MouseEvent) => {
-        ev.preventDefault();
-        try { await api.signout(); } catch {}
-        location.reload();
-      },
-    }, "Sign out");
-
-    const userMenu = h("details", { class: "user-menu" },
-      h("summary", {
-        class: "user-menu__trigger",
-        "aria-label": me.siteAdmin.displayName || me.siteAdmin.email,
-      },
-        gravatarImg(me.siteAdmin.email, 24),
-        h("span", { class: "user-menu__caret", "aria-hidden": "true" }, "▾"),
-      ),
-      h("div", { class: "user-menu__panel", role: "menu" },
-        h("div", { class: "user-menu__meta" },
-          h("strong", null, me.siteAdmin.displayName ?? me.siteAdmin.email),
-          h("br", null),
-          me.siteAdmin.email,
-          h("br", null),
-          "Site admin",
-        ),
-        h("a", { class: "user-menu__item", href: "#/profile" }, "Profile"),
-        signOutBtn,
-      ),
-    );
-    document.addEventListener("click", (ev) => {
-      if (!userMenu.contains(ev.target as Node)) userMenu.removeAttribute("open");
+    const masthead = renderMasthead({
+      title: "BULLETINMAIL",
+      titleHref: "/",
+      right: userMenu,
     });
 
     const dateline = h("div", { class: "dateline dateline--row" },
       h("div", { class: "dateline__nav" }, "Site admin"),
-      userMenu,
     );
 
     const heading = h("div", { class: "row row--baseline" },
