@@ -20,10 +20,10 @@ export function renderShell(root: HTMLElement, me: TenantMe, _active: "home" | "
     ],
   });
 
-  // On tenant subdomains the tenant IS the brand; "Bulletinmail" becomes a
+  // On tenant subdomains the tenant IS the brand; "BulletinMail" becomes a
   // mono kicker above the wordmark.
   const masthead = renderMasthead({
-    kicker: "Bulletinmail",
+    kicker: "BulletinMail",
     title: me.tenant.displayName,
     titleHref: "#/home",
     right: userMenu,

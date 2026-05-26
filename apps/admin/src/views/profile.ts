@@ -83,7 +83,7 @@ export function renderProfile(root: HTMLElement, me: Me): void {
 
     const masthead = h("header", { class: "masthead masthead--tenant" },
       h("h1", { class: "wordmark wordmark--with-kicker" },
-        h("span", { class: "wordmark__kicker" }, "Bulletinmail"),
+        h("span", { class: "wordmark__kicker" }, "BulletinMail"),
         h("a", { href: backHref }, isTenant ? me.tenant.displayName : "Site admin"),
       ),
     );

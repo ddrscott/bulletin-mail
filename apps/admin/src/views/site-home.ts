@@ -43,7 +43,7 @@ export function renderSiteHome(root: HTMLElement, me: SiteMe): void {
     });
 
     const masthead = renderMasthead({
-      title: "BULLETINMAIL",
+      title: "BulletinMail",
       titleHref: "/",
       right: userMenu,
     });

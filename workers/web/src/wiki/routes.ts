@@ -381,7 +381,7 @@ function renderWikiShell(
 <div class="app-shell">
   <header class="masthead masthead--tenant">
     <h1 class="wordmark wordmark--with-kicker">
-      <span class="wordmark__kicker">Bulletinmail</span>
+      <span class="wordmark__kicker">BulletinMail</span>
       <a href="/">${esc(tenant.display_name)}</a>
     </h1>
     ${userMenuHtml}

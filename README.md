@@ -81,7 +81,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Commits must be DCO-signed (`git commi
 
 ## License
 
-[AGPL-3.0-only](LICENSE). The name **BulletinMail** and `bulletinmail.org` are trademarks of the project maintainer — forks that run BulletinMail as a service must rebrand. Self-hosting under your own brand (or no brand at all) is fine.
+[AGPL-3.0-only](LICENSE). The name **BulletinMail** and `bulletinmail.org` are trademarks of [Left Join Studio, Inc.](https://leftjoin.studio) — forks that run BulletinMail as a service must rebrand. Self-hosting under your own brand (or no brand at all) is fine.
 
 ---
 

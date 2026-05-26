@@ -78,7 +78,7 @@ main {
 /* -------------------------------------------------------------------------
  * Masthead — tenant variant
  *
- * On <tenant>.<apex> the tenant name is the lead; "Bulletinmail" becomes a
+ * On <tenant>.<apex> the tenant name is the lead; "BulletinMail" becomes a
  * mono kicker above. Shrinks the visual weight that the 32px serif wordmark
  * otherwise imposes — important on mobile where every pixel counts.
  * ------------------------------------------------------------------------- */

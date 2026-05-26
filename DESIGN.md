@@ -27,13 +27,13 @@ Every surface — docs landing, admin shell, sign-in, even error pages — opens
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ THE BULLETIN  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  VOL. I · 2026     │
+│ BulletinMail ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  VOL. I · 2026     │
 │ MONDAY · MAY 25 · MAILING LISTS THAT JUST WORK · SINCE 2026      │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Composition:
-- **Wordmark** in serif, large, tracking tight. `THE BULLETIN` for marketing/docs; `BULLETINMAIL · ADMIN` for the admin app.
+- **Wordmark** in serif, large, tracking tight. Always written `BulletinMail` (mixed case) — never all-caps, never one word lowercase, never "THE BULLETIN". Same wordmark across docs, admin, and tenant chrome.
 - **Rule** — an indigo bar (or a Unicode block run) carrying the eye from wordmark to volume marker.
 - **Volume marker** — `VOL. I · 2026` in mono, right-aligned. Mono signals "this is a system value, not a slogan."
 - **Dateline** in small caps, all-caps, letter-spaced. On admin pages, the dateline becomes a breadcrumb: `LIST · ANNOUNCEMENTS · MEMBERS`.
@@ -183,7 +183,7 @@ See §3. CSS sketch:
 
 ```html
 <header class="masthead">
-  <h1 class="wordmark">THE BULLETIN</h1>
+  <h1 class="wordmark">BulletinMail</h1>
   <div class="masthead-rule"></div>
   <span class="masthead-volume">VOL. I · 2026</span>
 </header>
@@ -491,7 +491,7 @@ If you catch yourself doing one of these, stop and re-read this document.
 | **`apps/docs/`** landing (`/`)| Astro/Starlight `template: splash` override + custom CSS                        | Full broadsheet — masthead, dateline, 2-col hero, classifieds CTAs      |
 | **`apps/docs/`** content pages| Starlight default w/ injected `customCss` for tokens, fonts, dropcap, section rules | Single-column 680px body. Dropcap on first paragraph. Section rules between H2s |
 | **`apps/admin/`** shell       | `src/styles.css` rewrite using these tokens                                     | Masthead (admin variant), breadcrumb dateline, classifieds-style tables |
-| **`apps/admin/`** sign-in     | `src/views/signin.ts`                                                           | 384px center column, large serif `BULLETINMAIL`, mono `v1.0` next to it |
+| **`apps/admin/`** sign-in     | `src/views/signin.ts`                                                           | 384px center column, large serif `BulletinMail`, mono `v1.0` next to it |
 | **Marketing pages** (future)  | Static HTML in repo, same `tokens.css`                                          | Full broadsheet                                                          |
 | **Sent-mail HTML body**       | RFC-safe inline-only CSS subset                                                  | Masthead in serif, dateline mono, **no web fonts** (system serifs only) |
 

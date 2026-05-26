@@ -13,7 +13,7 @@ export function renderSignIn(root: HTMLElement): void {
     const shell = h("div", { class: "signin-shell" });
 
     shell.appendChild(h("header", { class: "masthead" },
-      h("h1", { class: "wordmark" }, "BULLETINMAIL"),
+      h("h1", { class: "wordmark" }, "BulletinMail"),
     ));
     shell.appendChild(h("p", { class: "dateline" },
       mode === "signup" ? "First-time setup · Bootstrap admin" : "Sign in · Magic link",

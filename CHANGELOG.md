@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — legal pages + brand consistency
+- **Terms of Service** at `/legal/terms/` and **Privacy Notice** at `/legal/privacy/` (docs site). Names Left Join Studio, Inc. as the provider, sets governing law to Illinois, disclaims warranties (best-effort service), and commits to no-sale-of-data + first-party analytics only. Both pages link from the splash-page colophon footer; intentionally absent from the sidebar.
+- **Brand wordmark standardized to `BulletinMail` (mixed case)** across docs (`THE BULLETIN` → `BulletinMail`), site-admin home (`BULLETINMAIL` → `BulletinMail`), sign-in (`BULLETINMAIL` → `BulletinMail`), profile + tenant + wiki kickers (`Bulletinmail` → `BulletinMail`). Trademark line on the splash page now attributes ownership to Left Join Studio, Inc. (was: "the project maintainer"). `DESIGN.md` §3 updated with an explicit no-regression rule.
+
 ### Added — Phase 2 slice 1: admin auth + members CRUD
 - **Admin sign-in (magic-link).** New API surface in `workers/web/src/routes/admin/`:
   - `POST /api/auth/request {email}` — looks up admins by email, queues one magic-link email per matching tenant via `env.EMAIL` (transactional, no list headers). 15-min token lifetime. Always returns 204 to avoid leaking which emails match an admin.
