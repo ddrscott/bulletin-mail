@@ -160,10 +160,15 @@ async function sendSiteMagicLink(
   const verifyUrl = `https://${config.apexDomain}/auth/verify?token=${token}`;
   const from = systemAddress(config, "noreply");
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  // Vary the subject per request so Gmail doesn't thread successive sign-in
+  // emails together (which buries the newest link at the bottom of the
+  // conversation, behind expired ones). The 8-char token prefix is unique
+  // by construction and the timestamp gives a human-readable cue.
+  const subjectSuffix = `${timestampLabel(Date.now())} · ${token.slice(0, 8)}`;
   try {
     await env.EMAIL.send({
       to: email, from,
-      subject: `Sign in to ${config.productName} (site admin)`,
+      subject: `Sign in to ${config.productName} (site admin) — ${subjectSuffix}`,
       text: `Click the link below to sign in to ${config.productName} as a site admin:\n\n${verifyUrl}\n\nLink expires in 15 minutes.`,
       html: `<!doctype html><html><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:2rem auto;padding:0 1rem">
 <h1 style="font-size:1.2rem">Sign in to ${esc(config.productName)} (site admin)</h1>
@@ -222,10 +227,12 @@ async function sendTenantMagicLink(c: Ctx, adminId: string, email: string): Prom
   const verifyUrl = `https://${host}/auth/verify?token=${token}`;
   const from = systemAddress(config, "noreply");
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  // See site magic-link comment — vary the subject so Gmail doesn't thread.
+  const subjectSuffix = `${timestampLabel(Date.now())} · ${token.slice(0, 8)}`;
   try {
     await c.env.EMAIL.send({
       to: email, from,
-      subject: `Sign in to ${config.productName}`,
+      subject: `Sign in to ${config.productName} — ${subjectSuffix}`,
       text: `Click below to sign in:\n\n${verifyUrl}\n\nLink expires in 15 minutes.`,
       html: `<!doctype html><html><body style="font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:2rem auto;padding:0 1rem">
 <h1 style="font-size:1.2rem">Sign in</h1>
@@ -267,6 +274,17 @@ function randomToken(): string {
   let s = "";
   for (let i = 0; i < buf.length; i++) s += buf[i]!.toString(16).padStart(2, "0");
   return s;
+}
+
+/** Short 'MMM D HH:mm' UTC label for magic-link email subjects so each
+ * request produces a unique subject and Gmail doesn't thread them. */
+function timestampLabel(now: number): string {
+  const d = new Date(now);
+  const month = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()]!;
+  const day = d.getUTCDate();
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${month} ${day} ${hh}:${mm} UTC`;
 }
 
 function errorPage(message: string): string {
