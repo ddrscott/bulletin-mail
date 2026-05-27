@@ -14,6 +14,7 @@
  */
 
 import type { Hono } from "hono";
+import { systemAddress } from "@bulletinmail/shared";
 import type { AppVariables, Env } from "../types.js";
 
 const escapeHtml = (s: string): string =>
@@ -87,11 +88,11 @@ export function mountContact(
       });
       if (!res.ok) {
         console.error("Discord webhook failed:", res.status, await res.text());
-        return c.html(errorPage(c.var.config.productName), 502);
+        return c.html(errorPage(c.var.config.productName, systemAddress(c.var.config, "support")), 502);
       }
     } catch (err) {
       console.error("Discord webhook error:", err);
-      return c.html(errorPage(c.var.config.productName), 502);
+      return c.html(errorPage(c.var.config.productName, systemAddress(c.var.config, "support")), 502);
     }
 
     return c.html(successPage(c.var.config.productName, email), 200);
@@ -169,11 +170,11 @@ function successPage(productName: string, email: string): string {
   );
 }
 
-function errorPage(productName: string): string {
+function errorPage(productName: string, supportEmail: string): string {
   return shell(
     productName,
     `<h1>Couldn't send your message</h1>
-<p>Something went wrong on our end relaying your message. Try again in a minute, or email <a href="mailto:legal@bulletinmail.org">legal@bulletinmail.org</a> if it keeps failing.</p>
+<p>Something went wrong on our end relaying your message. Try again in a minute, or email <a href="mailto:${escapeHtml(supportEmail)}">${escapeHtml(supportEmail)}</a> if it keeps failing.</p>
 <p><a href="/contact">← Try again</a></p>`,
   );
 }

@@ -1,0 +1,19 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [
+    ".astro/types.d.ts",
+    "astro.config.mjs",
+    "src/components/**/*",
+    "src/styles/**/*",
+    "src/content.config.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/worker",
+    "src/admin",
+    "workers",
+    "packages",
+    "cli"
+  ]
+}

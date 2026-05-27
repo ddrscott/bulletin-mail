@@ -1,4 +1,7 @@
-# `InstanceConfig` reference
+---
+title: "InstanceConfig schema"
+description: "Per-deployment configuration: every field, type, and default."
+---
 
 Per-deployment configuration for a BulletinMail instance. Lives at `deployments/<apex>/instance.config.json` and is loaded at Worker startup via `loadFromEnv` in `packages/shared/src/config.ts`. The JSON Schema is at `packages/shared/instance.config.schema.json`.
 

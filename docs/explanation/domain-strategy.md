@@ -1,4 +1,7 @@
-# Why subdomain-per-tenant
+---
+title: "Domain strategy"
+description: "Why each tenant gets its own DNS subdomain — and the Cloudflare workaround forced on the From header."
+---
 
 Every BulletinMail tenant gets a real DNS subdomain of the apex. `firstpresby.bulletinmail.org`. `stmarks.bulletinmail.org`. List addresses live there: `announcements@firstpresby.bulletinmail.org`. This page is about why.
 
@@ -55,4 +58,4 @@ The validator (`validateTenantSlug` in the same file) also enforces format: 3–
 - PRD §6 — Domain Strategy (canonical)
 - PRD §9.1 — DMARC Alignment via From Rewrite
 - PRD §17 #6 — Outbound sender-domain authorization (the live-deployment discovery)
-- [http-routing.md](http-routing.md) — how HTTP traffic for tenant subdomains gets handled
+- [http-routing](/explanation/http-routing/) — how HTTP traffic for tenant subdomains gets handled

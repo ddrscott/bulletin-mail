@@ -1,4 +1,7 @@
-# Self-hosting BulletinMail
+---
+title: "Self-host your own instance"
+description: "Deploy BulletinMail to your own Cloudflare account in ~90 minutes."
+---
 
 This guide walks an operator through deploying their own BulletinMail instance under their own apex domain on their own Cloudflare account. Estimated time, end-to-end: ~90 minutes if you already have a Cloudflare account.
 
@@ -48,7 +51,7 @@ Edit `deployments/<your-apex>/instance.config.json`:
 - `operator.contactUrl` — link in the footer for support
 - `additionalReservedSlugs` — any subdomains you plan to use later (`donate`, `events`, your org name, etc.)
 
-The full schema is in [`packages/shared/instance.config.schema.json`](../packages/shared/instance.config.schema.json). Editors that respect `$schema` (VSCode, JetBrains) will autocomplete.
+The full schema is in [`packages/shared/instance.config.schema.json`](https://github.com/ddrscott/bulletin-mail/blob/main/packages/shared/instance.config.schema.json). Editors that respect `$schema` (VSCode, JetBrains) will autocomplete.
 
 ---
 
@@ -265,7 +268,7 @@ Set up DMARC report ingestion: aggregate reports will land at `dmarc@<your-apex>
 - **Suspending a tenant:** `pnpm cli ... ` *(Phase 1)* or set `tenants.status = 'suspended'` in D1.
 - **Adding new reserved subdomains later:** edit `deployments/<your-apex>/instance.config.json`'s `additionalReservedSlugs`, re-render, re-deploy. Existing tenants on those subdomains are not affected.
 
-See [`operations.md`](operations.md) for the operator runbook.
+See [`operations.md`](/how-to/operations/) for the operator runbook.
 
 ---
 
@@ -291,7 +294,7 @@ By deploying BulletinMail under your own apex, **you become the operator of that
 - **You are the legal entity** that sends every bulletin from your apex. Your `operator.legalName` and `operator.mailingAddress` appear in every outbound footer; both must be real and yours. Never reuse the values from `deployments/bulletinmail.org/` — those belong to Left Join Studio, Inc. for the reference instance at `bulletinmail.org`. Using them on a fork misattributes liability and may constitute trademark misuse.
 - **You assume all liability** for your deployment — data handling, deliverability, abuse complaints, regulatory compliance (CAN-SPAM, GDPR, CASL, COPPA as applicable), and your relationship with your subscribers. This is true whether you operate the instance as a free service for one organization, a community resource, or a commercial for-profit offering.
 - **You must publish your own Terms of Service and Privacy Notice.** The pages at `apps/docs/src/content/docs/legal/` in the upstream repo are LJS-specific text for `bulletinmail.org` and may not be reproduced verbatim. Replace them with your own (or remove them and serve your legal text elsewhere) before deploying your docs site publicly.
-- **The BulletinMail software is provided AS IS** under [AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0.html), with no warranty and no support obligation from LJS or other contributors. See [`explanation/distribution-model.md`](../explanation/distribution-model.md) for the rationale.
+- **The BulletinMail software is provided AS IS** under [AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0.html), with no warranty and no support obligation from LJS or other contributors. See [Distribution model](/explanation/distribution-model/) for the rationale.
 
 If you run BulletinMail commercially, none of the above changes — but expect heightened scrutiny from regulators and recipients. Plan accordingly.
 

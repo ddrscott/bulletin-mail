@@ -1,4 +1,7 @@
-# Distribution model
+---
+title: "Distribution model"
+description: "AGPL-3.0 choice, three-layer separation, what lives where."
+---
 
 BulletinMail is open source, AGPL-3.0-only, and structured as a **deployable application, not a library**. This page is about why those words matter and what they mean for how the codebase is organized.
 
@@ -83,7 +86,7 @@ In all three cases, Left Join Studio, Inc. and the upstream contributors:
 - Have no service-level obligation, support obligation, or indemnity duty to the host or to the host's users.
 - Are not party to the host's Terms of Service or Privacy Notice — the host must publish their own under their own legal name and address.
 
-The `operator` block in `instance.config.json` exists exactly so this stays unambiguous: every outbound bulletin's CAN-SPAM footer carries the deploying entity's legal name and postal address, not LJS's. See [`how-to/self-host.md` §15](../how-to/self-host.md#15-legal--operator-identity) for the operator's checklist.
+The `operator` block in `instance.config.json` exists exactly so this stays unambiguous: every outbound bulletin's CAN-SPAM footer carries the deploying entity's legal name and postal address, not LJS's. See [Self-host §15](/how-to/self-host/#15-legal--operator-identity) for the operator's checklist.
 
 Commercial use of the software is **permitted** under the AGPL (with the source-publication obligation kicking in if you offer it as a service). It is also **squarely the operator's risk**.
 
@@ -97,5 +100,5 @@ This will get more formal if contribution volume justifies it. Until then, simpl
 
 - PRD §19 — Distribution Model (canonical)
 - PRD §20 — Instance Configuration Manifest
-- [reference/instance-config.md](../reference/instance-config.md) — every field in the `InstanceConfig` schema
-- [`CONTRIBUTING.md`](../../CONTRIBUTING.md) — DCO + commit conventions
+- [reference/instance-config](/reference/instance-config/) — every field in the `InstanceConfig` schema
+- [`CONTRIBUTING.md`](https://github.com/ddrscott/bulletin-mail/blob/main/CONTRIBUTING.md) — DCO + commit conventions

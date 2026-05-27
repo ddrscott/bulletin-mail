@@ -1,4 +1,7 @@
-# `bulletin` CLI reference
+---
+title: "CLI reference"
+description: "bulletin operator commands for tenants, groups, and members."
+---
 
 Operator CLI for BulletinMail. Source: `cli/src/index.ts`.
 

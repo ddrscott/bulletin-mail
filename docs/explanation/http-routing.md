@@ -1,4 +1,7 @@
-# HTTP routing: one Worker, every subdomain
+---
+title: "HTTP routing"
+description: "One Worker handles every request to the apex + every subdomain (the relaytty.com playbook)."
+---
 
 Every HTTP request to a BulletinMail instance — the apex marketing page, the `/u/<token>` unsubscribe handler, the eventual admin app at `app.<apex>`, an archive viewer at `<tenant>.<apex>/g/<group>`, a bounce-event webhook — is served by **a single Worker**. There is no per-route, per-tenant, or per-feature HTTP deployment. This page is about why we made that choice and what the pattern looks like.
 

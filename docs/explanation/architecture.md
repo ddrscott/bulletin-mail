@@ -1,6 +1,9 @@
-# Architecture overview
+---
+title: "Architecture overview"
+description: "The pipeline in one paragraph + hot paths for new contributors."
+---
 
-A short orientation for new contributors. The [PRD](../../PRD.md) is the canonical, exhaustive design document; this page exists to get you to the right neighborhood in five minutes before you dive in.
+A short orientation for new contributors. The [PRD](https://github.com/ddrscott/bulletin-mail/blob/main/PRD.md) is the canonical, exhaustive design document; this page exists to get you to the right neighborhood in five minutes before you dive in.
 
 ## The pipeline in one paragraph
 
@@ -12,9 +15,9 @@ That sentence is the whole product. Everything below is how each piece holds tog
 
 These three decisions account for why the codebase looks the way it does. Each has a dedicated explanation page:
 
-- **Subdomain-per-tenant** — every tenant gets `<slug>.<apex>` so DMARC alignment and IP reputation are automatic. See [domain-strategy.md](domain-strategy.md).
-- **One Worker per layer of concern, not per HTTP route** — a single Worker handles every HTTP request to the apex and every subdomain via Hono dispatch, modeled on relaytty.com. See [http-routing.md](http-routing.md).
-- **Open source as a deployable application, not a library** — three-layer separation between generic code, per-instance overlay, and (eventually) hosted-only assets, under AGPL-3.0. See [distribution-model.md](distribution-model.md).
+- **Subdomain-per-tenant** — every tenant gets `<slug>.<apex>` so DMARC alignment and IP reputation are automatic. See [domain-strategy](/explanation/domain-strategy/).
+- **One Worker per layer of concern, not per HTTP route** — a single Worker handles every HTTP request to the apex and every subdomain via Hono dispatch, modeled on relaytty.com. See [http-routing](/explanation/http-routing/).
+- **Open source as a deployable application, not a library** — three-layer separation between generic code, per-instance overlay, and (eventually) hosted-only assets, under AGPL-3.0. See [distribution-model](/explanation/distribution-model/).
 
 ## Hot paths a contributor reads first
 

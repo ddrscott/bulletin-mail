@@ -1,5 +1,4 @@
 packages:
   - "workers/*"
   - "packages/*"
-  - "apps/*"
   - "cli"

@@ -143,7 +143,9 @@ type WorkerEntry = {
 const WORKERS: WorkerEntry[] = [
   { name: "inbound", dir: "workers/inbound", hasVars: true },
   { name: "sender", dir: "workers/sender", hasVars: true },
-  { name: "web", dir: "apps/web", hasVars: true },
+  // Web Worker lives at the repo root (its package.json and wrangler.toml are
+  // the root-level ones). Render directly into the root wrangler.generated.toml.
+  { name: "web", dir: ".", hasVars: true },
 ];
 
 for (const w of WORKERS) {

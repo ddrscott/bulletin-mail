@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "src/worker/index.ts",
   "description": "Open-source multi-tenant mailing list service on Cloudflare's developer platform.",
   "license": "AGPL-3.0-only",
   "homepage": "https://bulletinmail.org",
@@ -15,26 +16,43 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @bulletinmail/web dev:worker",
-    "dev:docs": "pnpm --filter @bulletinmail/web dev:docs",
-    "dev:web": "pnpm --filter @bulletinmail/web dev:worker",
+    "dev": "wrangler dev",
+    "dev:docs": "astro dev",
+    "dev:worker": "wrangler dev",
     "dev:inbound": "pnpm --filter @bulletinmail/inbound dev",
     "dev:sender": "pnpm --filter @bulletinmail/sender dev",
-    "build": "pnpm -r build",
-    "build:web": "pnpm --filter @bulletinmail/web build",
-    "deploy": "pnpm --filter @bulletinmail/web deploy",
+
+    "build": "pnpm build:web && pnpm -r build",
+    "build:web": "astro build && node build-admin.mjs",
+    "build:docs": "astro build",
+    "build:admin": "node build-admin.mjs",
+    "preview": "astro preview",
+
+    "deploy": "wrangler deploy --config wrangler.generated.toml",
     "deploy:inbound": "pnpm --filter @bulletinmail/inbound deploy",
     "deploy:sender": "pnpm --filter @bulletinmail/sender deploy",
-    "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
+
+    "test": "vitest run --passWithNoTests && pnpm -r test",
+    "typecheck": "astro check && tsc --noEmit -p src/worker/tsconfig.json && tsc --noEmit -p src/admin/tsconfig.json && pnpm -r typecheck",
     "lint": "pnpm -r lint",
+
     "render-wrangler": "tsx scripts/render-wrangler.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "cli": "pnpm --filter @bulletinmail/cli exec bulletin",
     "check-instance-leakage": "bash scripts/check-no-instance-leakage.sh"
   },
+  "dependencies": {
+    "@astrojs/starlight": "^0.30.0",
+    "@bulletinmail/db": "workspace:*",
+    "@bulletinmail/shared": "workspace:*",
+    "astro": "^5.0.0",
+    "hono": "^4.6.0",
+    "marked": "^15.0.0",
+    "sharp": "^0.33.0"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
+    "esbuild": "^0.24.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",

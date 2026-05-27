@@ -24,11 +24,18 @@ NEEDLES=(
 )
 
 # Directories that must remain instance-agnostic.
+#
+# After the web-Worker consolidation, source code lives at the repo root.
+# Only src/worker (Hono code) and src/admin (SPA) are generic — they must
+# load apex from InstanceConfig at runtime. The rest of src/ (astro/starlight
+# components, styles, content config) and the /docs/ tree are site-specific
+# content where the reference apex string is allowed.
 SCAN_DIRS=(
   "workers"
   "packages"
   "cli"
-  "apps"
+  "src/worker"
+  "src/admin"
 )
 
 EXCLUDE_GLOBS=(
@@ -38,10 +45,6 @@ EXCLUDE_GLOBS=(
   "*/.wrangler/*"
   "*/tests/fixtures/*"
   "*.generated.toml"
-  # Docs + marketing copy is *content*, not generic code. The Astro site at
-  # apps/docs/ ships with BulletinMail branding by default; forks fork it
-  # whole (per the AGPL distribution model, PRD §19).
-  "apps/docs/*"
 )
 
 fail=0

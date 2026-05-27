@@ -1,4 +1,7 @@
-# Operator runbook
+---
+title: "Day-2 operations"
+description: "Routine ops, incident triage, capacity, decommissioning a tenant."
+---
 
 Day-2 operations for a running BulletinMail instance.
 

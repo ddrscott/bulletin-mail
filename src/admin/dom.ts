@@ -76,11 +76,10 @@ export function gravatarImg(email: string, size = 32): HTMLImageElement {
 
 /**
  * Strip the first DNS label off `location.host` to derive the apex.
- *   app.bulletinmail.org             → bulletinmail.org
- *   abolitionistsrising.bulletinmail.org → bulletinmail.org
+ *   <tenant>.<apex>.tld → <apex>.tld
  *
- * The SPA never runs on the bare apex (docs site owns /), so we don't worry
- * about the edge case where there's no leading subdomain.
+ * The SPA never runs on the bare apex (the marketing site owns /), so we
+ * don't worry about the edge case where there's no leading subdomain.
  */
 export function currentApex(): string {
   return location.host.replace(/^[^.]+\./, "");

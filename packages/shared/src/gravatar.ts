@@ -43,7 +43,7 @@ export async function fetchGravatarDisplayName(email: string): Promise<string | 
     const hash = await gravatarHash(email);
     const res = await fetch(`https://gravatar.com/${hash}.json`, {
       cf: { cacheTtl: 3600 } as RequestInitCfPropertiesRecord,
-      headers: { "User-Agent": "BulletinMail/0.1 (+https://bulletinmail.org)" },
+      headers: { "User-Agent": "BulletinMail/0.1" },
     } as RequestInit);
     if (!res.ok) return null; // 404 = no profile registered
     const data = (await res.json()) as GravatarProfileResponse;
