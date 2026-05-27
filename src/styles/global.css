@@ -68,6 +68,11 @@
 
   /* Content width to match our prose-column spec (680 + sidebar = ~1100 total) */
   --sl-content-width: 740px;
+
+  /* Our custom masthead is taller than Starlight's default 4rem (the 32px
+   * serif wordmark plus padding-block: var(--space-5)). Bump nav-height to
+   * match so the fixed outer .header doesn't overlap the page H1. */
+  --sl-nav-height: 5rem;
 }
 
 /* The splash page fills the full chrome width so the broadsheet 2- and 3-up
@@ -198,6 +203,17 @@ header.masthead.masthead--chrome {
  * and an indented item list. We pull it in close so the prose column gets
  * more room and the TOC reads as a tight column of secondary links.
  * ------------------------------------------------------------------------- */
+/* Starlight constrains the right TOC's .sl-container to roughly 25% of
+ * leftover viewport at >=72rem, which makes entries like 'The pipeline in
+ * one paragraph' wrap to 3+ lines. Override so the TOC gets the full sidebar
+ * width minus its panel padding (Starlight's own formula but without the
+ * .25 multiplier). */
+@media (min-width: 72rem) {
+  .right-sidebar-panel .sl-container {
+    max-width: calc(var(--sl-sidebar-width) - 2 * var(--sl-sidebar-pad-x));
+  }
+}
+
 .right-sidebar starlight-toc h2 {
   font-family: var(--font-sans);
   font-size: var(--text-xs);
