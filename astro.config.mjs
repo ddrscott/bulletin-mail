@@ -23,15 +23,16 @@ export default defineConfig({
       description: "Mailing lists that just work — multi-tenant, open source, runs on Cloudflare.",
       customCss: ["./src/styles/global.css"],
       components: {
-        Head: "./src/components/Head.astro",
-        Header: "./src/components/Header.astro",
+        // ThemeSelect is overridden to a no-op so users can't switch out
+        // of the single light theme we ship. Header + Head use Starlight
+        // defaults — we don't fight the framework's chrome anymore.
         ThemeSelect: "./src/components/ThemeSelect.astro",
       },
       social: {
         github: "https://github.com/ddrscott/bulletin-mail",
       },
       editLink: {
-        baseUrl: "https://github.com/ddrscott/bulletin-mail/edit/main/apps/web/",
+        baseUrl: "https://github.com/ddrscott/bulletin-mail/edit/main/",
       },
       sidebar: [
         {

@@ -167,11 +167,7 @@ function landingPage(productName: string): string {
     </nav>
   </header>
 
-  <p class="dateline">
-    Monday <span class="sep">·</span>
-    All the news fit to forward <span class="sep">·</span>
-    Set in Source Serif, Inter, IBM Plex Mono
-  </p>
+  <p class="dateline">Discussion groups in your inbox.</p>
 
   <section class="broadsheet-hero">
     <div class="broadsheet">
