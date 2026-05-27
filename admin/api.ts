@@ -11,6 +11,7 @@ export class HttpError extends Error {
 
 export type TenantMe = {
   kind: "tenant";
+  apexDomain: string;
   admin: {
     id: string;
     email: string;
@@ -22,6 +23,7 @@ export type TenantMe = {
 
 export type SiteMe = {
   kind: "site";
+  apexDomain: string;
   siteAdmin: {
     id: string;
     email: string;

@@ -1,4 +1,4 @@
-import { h, mount, currentApex } from "../dom.js";
+import { h, mount } from "../dom.js";
 import { api } from "../api.js";
 import type { TenantMe, GroupSummary } from "../api.js";
 import { renderShell } from "./shell.js";
@@ -28,7 +28,7 @@ export async function renderGroup(root: HTMLElement, me: TenantMe, groupId: stri
     return;
   }
 
-  const apex = currentApex();
+  const apex = me.apexDomain;
   const header = h("div", { class: "group-header" },
     h("p", { class: "dateline" },
       h("a", { href: "#/home" }, "Groups"),

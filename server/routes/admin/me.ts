@@ -43,6 +43,7 @@ async function handleSiteMe(c: Ctx): Promise<Response> {
   const tenants = await listTenants(c.env.DB);
   return c.json({
     kind: "site",
+    apexDomain: c.var.config.apexDomain,
     siteAdmin: {
       id: siteAdmin.id,
       email: siteAdmin.email,
@@ -71,6 +72,7 @@ async function handleTenantMe(c: Ctx): Promise<Response> {
   const { tenant, admin } = result;
   return c.json({
     kind: "tenant",
+    apexDomain: c.var.config.apexDomain,
     admin: {
       id: admin.id,
       email: admin.email,

@@ -9,7 +9,7 @@
  * site-admin shell reads as a sibling of the tenant-admin shell.
  */
 
-import { h, mount, fmtDate, currentApex } from "../dom.js";
+import { h, mount, fmtDate } from "../dom.js";
 import { api, HttpError } from "../api.js";
 import type { SiteMe } from "../api.js";
 import { renderMasthead, renderUserMenu, signOutItem } from "./masthead.js";
@@ -30,7 +30,7 @@ export function renderSiteHome(root: HTMLElement, me: SiteMe): void {
   };
 
   const draw = () => {
-    const apex = currentApex();
+    const apex = me.apexDomain;
 
     const userMenu = renderUserMenu({
       email: me.siteAdmin.email,

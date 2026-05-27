@@ -1,4 +1,4 @@
-import { h, mount, fmtDate, currentApex } from "../dom.js";
+import { h, mount, fmtDate } from "../dom.js";
 import { api, HttpError } from "../api.js";
 import type { TenantMe, GroupSummary, PostingPolicy, ReplyToPolicy, ArchiveVisibility } from "../api.js";
 import { renderShell } from "./shell.js";
@@ -96,7 +96,7 @@ function renderWikiCard(): HTMLElement {
 }
 
 function renderTable(me: TenantMe, groups: GroupSummary[]): HTMLElement {
-  const apex = currentApex();
+  const apex = me.apexDomain;
   return h("div", { class: "table-wrap" }, h("table", { class: "classifieds" },
     h("thead", null, h("tr", null,
       h("th", null, "Group"),
@@ -130,7 +130,7 @@ function renderCreateForm(
     archiveVisibility: ArchiveVisibility;
   }) => Promise<void>,
 ): HTMLElement {
-  const apex = currentApex();
+  const apex = me.apexDomain;
 
   const name = h("input", { type: "text", required: "required", placeholder: "announcements", pattern: "^[a-z][a-z0-9-]*[a-z0-9]$" }) as HTMLInputElement;
   const display = h("input", { type: "text", required: "required", placeholder: "Announcements" }) as HTMLInputElement;

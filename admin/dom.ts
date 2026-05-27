@@ -74,17 +74,6 @@ export function gravatarImg(email: string, size = 32): HTMLImageElement {
   return img;
 }
 
-/**
- * Strip the first DNS label off `location.host` to derive the apex.
- *   <tenant>.<apex>.tld → <apex>.tld
- *
- * The SPA never runs on the bare apex (the marketing site owns /), so we
- * don't worry about the edge case where there's no leading subdomain.
- */
-export function currentApex(): string {
-  return location.host.replace(/^[^.]+\./, "");
-}
-
 export function fmtDate(ms: number | null): string {
   if (!ms) return "—";
   const d = new Date(ms);
