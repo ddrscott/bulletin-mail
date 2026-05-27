@@ -69,10 +69,20 @@
   /* Content width to match our prose-column spec (680 + sidebar = ~1100 total) */
   --sl-content-width: 740px;
 
-  /* Our custom masthead is taller than Starlight's default 4rem (the 32px
-   * serif wordmark plus padding-block: var(--space-5)). Bump nav-height to
-   * match so the fixed outer .header doesn't overlap the page H1. */
-  --sl-nav-height: 5rem;
+  /* Starlight's PageFrame uses --sl-nav-height to set the outer fixed
+   * .header's height AND the inset-block-start of the fixed sidebars and
+   * the .main-frame's padding-top. Our custom masthead has its own
+   * padding-block, so we zero out Starlight's outer .header padding below
+   * and the full nav-height is available to the masthead.  */
+  --sl-nav-height: 6rem;
+}
+
+/* Starlight's outer fixed .header has padding intended for its own default
+ * header content (which we've replaced with a custom masthead). Zero it so
+ * the masthead can use the full --sl-nav-height without bleeding past the
+ * outer chrome's bottom edge. */
+.page > header.header {
+  padding: 0;
 }
 
 /* The splash page fills the full chrome width so the broadsheet 2- and 3-up
