@@ -39,10 +39,17 @@ export function mountTenant(app: Hono<{ Bindings: Env; Variables: AppVariables }
   // FIRST so its specific paths win over the catch-all below.
   mountWikiRoutes(app);
 
-  // Tenant admin SPA at /admin/* is served via the [assets] binding fallthrough
-  // in worker/index.ts. No explicit Hono mount needed — the SPA's hash routing
-  // means /admin/ → /admin/index.html and the SPA reads /api/me to learn it's
-  // in tenant context.
+  // Tenant admin SPA at /admin/* — explicit ASSETS fallthrough. The tenant
+  // catch-all below would otherwise eat /admin/styles.css, /admin/main.js,
+  // and /admin/index.html and return its 'not yet implemented' placeholder.
+  app.all("/admin", (c, next) => {
+    if (classifyHostFromCtx(c).kind !== "tenant") return next();
+    return c.env.ASSETS.fetch(c.req.raw);
+  });
+  app.all("/admin/*", (c, next) => {
+    if (classifyHostFromCtx(c).kind !== "tenant") return next();
+    return c.env.ASSETS.fetch(c.req.raw);
+  });
 
   // GET /join/:group — render the form
   app.get("/join/:group", async (c, next) => {
