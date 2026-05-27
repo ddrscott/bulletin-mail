@@ -26,7 +26,7 @@
 
 import type { Hono, Context } from "hono";
 import { gravatarHash, newUlid } from "@bulletinmail/shared";
-import type { Admin, Tenant } from "@bulletinmail/db";
+import { getAdminById, type Admin, type Tenant } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
 import {
   buildTenantClearCookie,
@@ -40,10 +40,18 @@ import {
   renderSignInSentPage,
 } from "./editor.js";
 import type {
+  ActivityRow,
   PageWithCurrentVersion,
   SavePageInput,
+  UpdateVersionSummaryInput,
   VersionRow,
 } from "./do.js";
+import {
+  computeUnifiedDiff,
+  generateSummary,
+  SUMMARY_FALLBACK,
+  type AiBindingLike,
+} from "./summary.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -137,13 +145,33 @@ export function mountWikiRoutes(
       note: body?.note ?? null,
       visibility,
     };
-    const saved = await callDo<{ pageId: string; versionId: string }>(stub, "savePage", input);
+    const saved = await callDo<{
+      pageId: string;
+      versionId: string;
+      previousMdSource: string | null;
+    }>(stub, "savePage", input);
 
     // Cache the compiled HTML to R2 — public reads now return immediately
     // without round-tripping the DO. Visibility is stored as metadata so the
     // read path can gate without going back to the DO.
     await writeR2Page(c, tenant.slug, slug, htmlCompiled, title, visibility);
-    return c.json(saved, 200);
+
+    // Fire-and-forget AI summary. The diff + LLM call + DO write all happen
+    // after the response is returned to the user — never blocks the save.
+    // Failures inside the writer log but do not throw (see summary.ts).
+    c.executionCtx.waitUntil(
+      summarizeAndStore({
+        ai: c.env.AI as AiBindingLike | undefined,
+        stub,
+        versionId: saved.versionId,
+        prevMd: saved.previousMdSource ?? "",
+        newMd: mdSource,
+      }),
+    );
+
+    // Strip the previousMdSource from the wire response — clients never
+    // need it and the source can be large.
+    return c.json({ pageId: saved.pageId, versionId: saved.versionId }, 200);
   }));
 
   app.get("/api/wiki/:slug/versions", (c) => withTenantAdmin(c, async ({ tenant }) => {
@@ -170,6 +198,25 @@ export function mountWikiRoutes(
     // Re-cache R2 with the reverted HTML.
     await writeR2Page(c, tenant.slug, slug, ver.html_compiled, page.title, page.visibility);
     return c.json(out);
+  }));
+
+  // ---- activity feed (admin only) -----------------------------------------
+  app.get("/activity", (c) => withTenantAdmin(c, async ({ tenant, admin }) => {
+    const stub = wikiStub(c, tenant);
+    const rows = await callDo<ActivityRow[]>(stub, "listRecentActivity", { limit: 100 });
+    const authorById = await loadAuthorNameMap(c, rows);
+    // Page-current md_source is only available via getPage(slug). For an
+    // accurate per-row delta we'd need the previous version's md too — that's
+    // expensive at list time. We use the stored summary as the headline and
+    // skip a per-row delta (the AI text already carries the change shape;
+    // and computing 100 diffs on render would defeat the point of the cache).
+    return c.html(renderActivityPage({
+      tenant,
+      productName: c.var.config.productName,
+      admin,
+      rows,
+      authorById,
+    }));
   }));
 
   app.post("/api/wiki/upload", (c) => withTenantAdmin(c, async ({ tenant }) => {
@@ -441,6 +488,7 @@ function renderWikiUserMenu(
     <a class="user-menu__item" href="/admin/#/profile">Profile</a>
     <div class="user-menu__section">Manage</div>
     <a class="user-menu__item" href="/admin/">Admin home</a>
+    <a class="user-menu__item" href="/activity">Wiki activity</a>
     <a class="user-menu__item" href="/wiki/${esc(slug)}/edit">Edit page</a>
     <form method="post" action="/auth/sign-out" style="margin:0">
       <button type="submit" class="user-menu__item user-menu__item--danger" style="text-align:left;width:100%">Sign out</button>
@@ -484,6 +532,166 @@ function pickExt(mime: string, name: string): string | null {
   if (ext) return ext;
   const m = /\.(png|jpe?g|gif|webp|svg)$/i.exec(name);
   return m ? m[1]!.toLowerCase().replace("jpeg", "jpg") : null;
+}
+
+// ---- activity feed --------------------------------------------------------
+
+/**
+ * Fire-and-forget worker that diffs old → new, hits Workers AI for a
+ * summary, and writes it back to the version row via DO RPC. Never throws.
+ * Designed to be called from `c.executionCtx.waitUntil(...)`.
+ */
+async function summarizeAndStore(opts: {
+  ai: AiBindingLike | undefined;
+  stub: DurableObjectStub;
+  versionId: string;
+  prevMd: string;
+  newMd: string;
+}): Promise<void> {
+  try {
+    const diff = computeUnifiedDiff(opts.prevMd, opts.newMd, 3);
+    // Empty diff (identical content) — record the fallback so the activity
+    // row isn't blank forever. The +0/-0 delta will tell the reader nothing
+    // really changed.
+    const summary = opts.ai
+      ? await generateSummary(opts.ai, diff)
+      : SUMMARY_FALLBACK;
+    const payload: UpdateVersionSummaryInput = {
+      versionId: opts.versionId,
+      summary,
+    };
+    await callDo<{ updated: boolean }>(opts.stub, "updateVersionSummary", payload);
+  } catch (err) {
+    console.error("wiki summary writer failed", err);
+  }
+}
+
+/**
+ * Bulk-load the display names for every distinct author_admin_id referenced
+ * by these activity rows. Falls back to "(deleted)" for rows whose author
+ * row has been removed.
+ */
+async function loadAuthorNameMap(
+  c: Ctx,
+  rows: ActivityRow[],
+): Promise<Map<string, string>> {
+  const ids = new Set<string>();
+  for (const r of rows) ids.add(r.author_admin_id);
+  const out = new Map<string, string>();
+  // Sequential D1 calls are fine — N is bounded by the activity row cap
+  // (100) and in practice 1–5 distinct authors. Keeps the query layer
+  // simple and avoids a one-off "list admins by ids" helper.
+  await Promise.all(
+    Array.from(ids).map(async (id) => {
+      const a = await getAdminById(c.env.DB, id);
+      out.set(id, a?.display_name ?? a?.email ?? "(deleted)");
+    }),
+  );
+  return out;
+}
+
+type ActivityPageOpts = {
+  tenant: Tenant;
+  productName: string;
+  admin: Admin;
+  rows: ActivityRow[];
+  authorById: Map<string, string>;
+};
+
+function renderActivityPage({ tenant, productName, admin, rows, authorById }: ActivityPageOpts): string {
+  const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  const items = rows.length === 0
+    ? `<li class="activity-empty muted">No edits yet. Save a page and the feed will populate here.</li>`
+    : rows.map((r) => renderActivityRow(r, authorById, esc)).join("");
+
+  return `<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activity — ${esc(tenant.display_name)}</title>
+<link rel="stylesheet" href="/admin/styles.css">
+<style>
+  main.activity-main { max-width: var(--width-prose); margin: 0 auto; padding: var(--space-6) 0 var(--space-9); }
+  main.activity-main h1 { font-size: var(--text-2xl); margin: 0 0 var(--space-2); }
+  main.activity-main p.lede { color: var(--ink-muted); margin: 0 0 var(--space-6); }
+  ul.activity-feed { list-style: none; padding: 0; margin: 0; }
+  ul.activity-feed > li.activity-row { padding: var(--space-4) 0; border-bottom: var(--hairline); }
+  ul.activity-feed > li.activity-row:last-child { border-bottom: 0; }
+  .activity-row__title { font: 600 var(--text-base) var(--font-sans); margin: 0 0 var(--space-1); }
+  .activity-row__title a { text-decoration: none; border-bottom: 1px dashed currentColor; color: var(--ink); }
+  .activity-row__title a:hover { background: var(--paper-2); }
+  .activity-row__summary { margin: var(--space-1) 0; color: var(--ink); }
+  .activity-row__summary.muted { color: var(--ink-muted); font-style: italic; }
+  .activity-row__meta { font: var(--text-xs)/1.4 var(--font-mono); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .activity-row__meta .sep { padding: 0 var(--space-2); }
+  .activity-row__delta .delta { font-weight: 700; padding: 0 2px; }
+  .activity-row__delta .delta--add { color: var(--ok, #166534); }
+  .activity-row__delta .delta--del { color: var(--alert, #b91c1c); margin-left: 4px; }
+  .activity-empty { padding: var(--space-5) 0; }
+</style>
+</head><body>
+<div class="app-shell">
+  <header class="masthead masthead--tenant">
+    <h1 class="wordmark wordmark--with-kicker">
+      <span class="wordmark__kicker">BulletinMail</span>
+      <a href="/">${esc(tenant.display_name)}</a>
+    </h1>
+    <a class="masthead__right" href="/admin/">Admin home</a>
+  </header>
+  <div class="dateline dateline--row">
+    <div class="dateline__nav">
+      <a href="/">Wiki</a><span class="sep">·</span><strong>Activity</strong>
+    </div>
+  </div>
+  <main class="activity-main">
+    <h1>Wiki activity</h1>
+    <p class="lede">Recent edits across every page, newest first. Summaries are AI-generated from the diff — the timestamp and author are the source of truth.</p>
+    <ul class="activity-feed">${items}</ul>
+  </main>
+  <footer class="wiki-footer"><a href="/">Home</a> · Powered by ${esc(productName)} · Signed in as ${esc(admin.display_name ?? admin.email)}</footer>
+</div>
+</body></html>`;
+}
+
+function renderActivityRow(
+  r: ActivityRow,
+  authorById: Map<string, string>,
+  esc: (s: string) => string,
+): string {
+  const summary = (r.summary ?? "").trim();
+  const summaryHtml = summary
+    ? `<p class="activity-row__summary">${esc(summary)}</p>`
+    : `<p class="activity-row__summary muted">${esc(SUMMARY_FALLBACK)}</p>`;
+  const author = authorById.get(r.author_admin_id) ?? "(deleted)";
+  const when = relativeTime(r.created_at);
+  // Show the deterministic line delta next to the AI summary — per the task
+  // constraint, the AI text never appears without a ground-truth signal.
+  // Pre-feature rows have null deltas; render them as a plain "—".
+  const deltaHtml = r.added_lines === null || r.removed_lines === null
+    ? `<span class="activity-row__delta muted">—</span>`
+    : `<span class="activity-row__delta"><span class="delta delta--add">+${r.added_lines}</span><span class="delta delta--del">-${r.removed_lines}</span></span>`;
+  return `<li class="activity-row">
+    <h2 class="activity-row__title"><a href="/wiki/${esc(r.page_slug)}">${esc(r.page_title)}</a> <span class="muted" style="font-weight:400">· /${esc(r.page_slug)}</span></h2>
+    ${summaryHtml}
+    <p class="activity-row__meta">
+      ${deltaHtml}<span class="sep">·</span>${esc(author)}<span class="sep">·</span>${esc(when)}<span class="sep">·</span>v${esc(r.version_id.slice(0, 8))}
+    </p>
+  </li>`;
+}
+
+/** Coarse human-readable relative time. Avoids a date-fns dep on the Worker. */
+function relativeTime(ts: number, now: number = Date.now()): string {
+  const seconds = Math.max(0, Math.round((now - ts) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  const years = Math.round(days / 365);
+  return `${years}y ago`;
 }
 
 export { slugify };

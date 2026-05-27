@@ -20,15 +20,23 @@
  *     html_compiled     TEXT NOT NULL          -- server-compiled HTML cache
  *     author_admin_id   TEXT NOT NULL
  *     note              TEXT NULL              -- optional revision note
+ *     summary           TEXT NULL              -- AI-generated change summary
+ *     added_lines       INTEGER NULL           -- deterministic line delta vs prev
+ *     removed_lines     INTEGER NULL
  *     created_at        INTEGER NOT NULL
  *
  * Writes go through RPC methods invoked from the Worker. Each save creates a
  * fresh version row (append-only) AND updates pages.current_version_id +
  * updated_at. Reverts insert a NEW version row referencing the older content
  * — we never mutate or delete old versions.
+ *
+ * The activity feed (cross-page, newest-first list of recent edits) reads
+ * versions + pages via listRecentActivity; per-row deltas come from the
+ * added_lines/removed_lines columns, summaries from the summary column.
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { computeLineDelta } from "./summary.js";
 
 export type PageVisibility = "public" | "private";
 
@@ -50,6 +58,37 @@ export type VersionRow = {
   html_compiled: string;
   author_admin_id: string;
   note: string | null;
+  created_at: number;
+  /**
+   * AI-generated 1–2 sentence summary of the change. NULL for older rows
+   * (no backfill) and for rows whose summary call hasn't completed (or
+   * failed). The activity feed shows "Minor changes." when null.
+   */
+  summary: string | null;
+  /**
+   * Deterministic line-count delta vs. the previous version, written at
+   * save time. NULL on the first save and for rows older than this feature.
+   * The activity feed uses these as the ground-truth change signal — the
+   * AI summary is a convenience layer on top.
+   */
+  added_lines: number | null;
+  removed_lines: number | null;
+};
+
+/**
+ * Row shape for the cross-page activity feed. JOIN of versions + pages so
+ * the feed never round-trips the DO per row.
+ */
+export type ActivityRow = {
+  version_id: string;
+  page_id: string;
+  page_slug: string;
+  page_title: string;
+  author_admin_id: string;
+  note: string | null;
+  summary: string | null;
+  added_lines: number | null;
+  removed_lines: number | null;
   created_at: number;
 };
 
@@ -77,10 +116,16 @@ const SCHEMA_SQL = [
      html_compiled       TEXT NOT NULL,
      author_admin_id     TEXT NOT NULL,
      note                TEXT,
+     summary             TEXT,
+     added_lines         INTEGER,
+     removed_lines       INTEGER,
      created_at          INTEGER NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_versions_page_created
      ON versions(page_id, created_at DESC)`,
+  // Cross-page activity feed sorts every version by created_at DESC.
+  `CREATE INDEX IF NOT EXISTS idx_versions_created
+     ON versions(created_at DESC)`,
 ];
 
 // In-place migrations for DO instances that were created before each column.
@@ -91,6 +136,21 @@ const COLUMN_MIGRATIONS: Array<{ table: string; column: string; ddl: string }> =
     table: "pages",
     column: "visibility",
     ddl: "ALTER TABLE pages ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public'",
+  },
+  {
+    table: "versions",
+    column: "summary",
+    ddl: "ALTER TABLE versions ADD COLUMN summary TEXT",
+  },
+  {
+    table: "versions",
+    column: "added_lines",
+    ddl: "ALTER TABLE versions ADD COLUMN added_lines INTEGER",
+  },
+  {
+    table: "versions",
+    column: "removed_lines",
+    ddl: "ALTER TABLE versions ADD COLUMN removed_lines INTEGER",
   },
 ];
 
@@ -139,6 +199,14 @@ export class TenantWikiDO extends DurableObject {
           const body = await request.json<RevertInput>();
           return Response.json(this.revertToVersion(body));
         }
+        case "POST /rpc/updateVersionSummary": {
+          const body = await request.json<UpdateVersionSummaryInput>();
+          return Response.json(this.updateVersionSummary(body));
+        }
+        case "POST /rpc/listRecentActivity": {
+          const body = await request.json<{ limit?: number }>();
+          return Response.json(this.listRecentActivity(body.limit ?? 50));
+        }
         default:
           return new Response("not found", { status: 404 });
       }
@@ -174,7 +242,7 @@ export class TenantWikiDO extends DurableObject {
     if (!page) return null;
     const ver = db
       .exec<VersionRow>(
-        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, created_at FROM versions WHERE id = ?",
+        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, summary, added_lines, removed_lines, created_at FROM versions WHERE id = ?",
         page.current_version_id,
       )
       .toArray()[0];
@@ -198,7 +266,7 @@ export class TenantWikiDO extends DurableObject {
   listVersions(pageId: string): VersionRow[] {
     return this.ctx.storage.sql
       .exec<VersionRow>(
-        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, created_at FROM versions WHERE page_id = ? ORDER BY created_at DESC",
+        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, summary, added_lines, removed_lines, created_at FROM versions WHERE page_id = ? ORDER BY created_at DESC",
         pageId,
       )
       .toArray();
@@ -207,10 +275,38 @@ export class TenantWikiDO extends DurableObject {
   getVersion(versionId: string): VersionRow | null {
     return this.ctx.storage.sql
       .exec<VersionRow>(
-        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, created_at FROM versions WHERE id = ?",
+        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, summary, added_lines, removed_lines, created_at FROM versions WHERE id = ?",
         versionId,
       )
       .toArray()[0] ?? null;
+  }
+
+  /**
+   * Recent versions across every page in this tenant's wiki, newest first.
+   * Joins page metadata so the activity feed renders without an extra
+   * round-trip per row. Hard-capped at 200 to bound the response size.
+   */
+  listRecentActivity(limit: number): ActivityRow[] {
+    const cappedLimit = Math.min(Math.max(1, limit | 0), 200);
+    return this.ctx.storage.sql
+      .exec<ActivityRow>(
+        `SELECT v.id AS version_id,
+                v.page_id AS page_id,
+                p.slug AS page_slug,
+                p.title AS page_title,
+                v.author_admin_id AS author_admin_id,
+                v.note AS note,
+                v.summary AS summary,
+                v.added_lines AS added_lines,
+                v.removed_lines AS removed_lines,
+                v.created_at AS created_at
+         FROM versions v
+         JOIN pages p ON p.id = v.page_id
+         ORDER BY v.created_at DESC
+         LIMIT ?`,
+        cappedLimit,
+      )
+      .toArray();
   }
 
   // ---- write -------------------------------------------------------------
@@ -218,13 +314,20 @@ export class TenantWikiDO extends DurableObject {
   /**
    * Upsert by slug. Creates the page if missing, otherwise updates title +
    * parent_id and appends a new version. Always inserts a fresh version row.
+   *
+   * Returns `previousMdSource` so the caller can compute a diff for the
+   * AI-summary writer without an extra round-trip. Null on first save.
    */
-  savePage(input: SavePageInput): { pageId: string; versionId: string } {
+  savePage(input: SavePageInput): {
+    pageId: string;
+    versionId: string;
+    previousMdSource: string | null;
+  } {
     const db = this.ctx.storage.sql;
     const now = Date.now();
     const slug = input.slug;
     const existing = db
-      .exec<PageRow>("SELECT id FROM pages WHERE slug = ?", slug)
+      .exec<PageRow>("SELECT id, current_version_id FROM pages WHERE slug = ?", slug)
       .toArray()[0];
 
     const versionId = ulid();
@@ -239,12 +342,25 @@ export class TenantWikiDO extends DurableObject {
 
     const visibility: PageVisibility = input.visibility === "private" ? "private" : "public";
     let pageId: string;
+    let previousMdSource: string | null = null;
     if (existing) {
       pageId = existing.id;
+      // Read the previous version's markdown BEFORE inserting the new row,
+      // so the summary writer can diff old → new.
+      const prevVer = db
+        .exec<{ md_source: string }>(
+          "SELECT md_source FROM versions WHERE id = ?",
+          existing.current_version_id,
+        )
+        .toArray()[0];
+      previousMdSource = prevVer?.md_source ?? null;
+      const delta = computeLineDelta(previousMdSource ?? "", input.mdSource);
       db.exec(
-        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         versionRow.id, pageId, versionRow.md_source, versionRow.html_compiled,
-        versionRow.author_admin_id, versionRow.note, versionRow.created_at,
+        versionRow.author_admin_id, versionRow.note,
+        delta.added, delta.removed,
+        versionRow.created_at,
       );
       db.exec(
         "UPDATE pages SET title = ?, parent_id = ?, current_version_id = ?, visibility = ?, updated_at = ? WHERE id = ?",
@@ -252,17 +368,40 @@ export class TenantWikiDO extends DurableObject {
       );
     } else {
       pageId = ulid();
+      // First version on a new page → everything is "added".
+      const delta = computeLineDelta("", input.mdSource);
       db.exec(
-        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         versionRow.id, pageId, versionRow.md_source, versionRow.html_compiled,
-        versionRow.author_admin_id, versionRow.note, versionRow.created_at,
+        versionRow.author_admin_id, versionRow.note,
+        delta.added, delta.removed,
+        versionRow.created_at,
       );
       db.exec(
         "INSERT INTO pages (id, slug, title, parent_id, current_version_id, visibility, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         pageId, slug, input.title, input.parentId ?? null, versionId, visibility, now, now,
       );
     }
-    return { pageId, versionId };
+    return { pageId, versionId, previousMdSource };
+  }
+
+  /**
+   * Persist an AI-generated summary onto a version row. Best-effort — the
+   * caller invokes this from `ctx.waitUntil(...)` after the save response
+   * has already been returned, so failures must not throw or block.
+   *
+   * Returns `true` when a row was actually updated. If the version was
+   * deleted between save and this call (or the id is unknown), the function
+   * just no-ops.
+   */
+  updateVersionSummary(input: UpdateVersionSummaryInput): { updated: boolean } {
+    const db = this.ctx.storage.sql;
+    const cursor = db.exec(
+      "UPDATE versions SET summary = ? WHERE id = ?",
+      input.summary,
+      input.versionId,
+    );
+    return { updated: cursor.rowsWritten > 0 };
   }
 
   /**
@@ -272,19 +411,43 @@ export class TenantWikiDO extends DurableObject {
   revertToVersion(input: RevertInput): { newVersionId: string } | null {
     const db = this.ctx.storage.sql;
     const oldVer = db
-      .exec<VersionRow>(
-        "SELECT id, page_id, md_source, html_compiled, author_admin_id, note, created_at FROM versions WHERE id = ?",
+      .exec<{
+        id: string;
+        page_id: string;
+        md_source: string;
+        html_compiled: string;
+      }>(
+        "SELECT id, page_id, md_source, html_compiled FROM versions WHERE id = ?",
         input.versionId,
       )
       .toArray()[0];
     if (!oldVer || oldVer.page_id !== input.pageId) return null;
 
+    // What's the current content? We need it to compute the revert's delta.
+    const page = db
+      .exec<{ current_version_id: string }>(
+        "SELECT current_version_id FROM pages WHERE id = ?",
+        input.pageId,
+      )
+      .toArray()[0];
+    const currentMd = page
+      ? db
+          .exec<{ md_source: string }>(
+            "SELECT md_source FROM versions WHERE id = ?",
+            page.current_version_id,
+          )
+          .toArray()[0]?.md_source ?? ""
+      : "";
+
     const newVersionId = ulid();
     const now = Date.now();
+    const delta = computeLineDelta(currentMd, oldVer.md_source);
     db.exec(
-      "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       newVersionId, input.pageId, oldVer.md_source, oldVer.html_compiled,
-      input.authorAdminId, `revert to ${oldVer.id.slice(0, 8)}`, now,
+      input.authorAdminId, `revert to ${oldVer.id.slice(0, 8)}`,
+      delta.added, delta.removed,
+      now,
     );
     db.exec(
       "UPDATE pages SET current_version_id = ?, updated_at = ? WHERE id = ?",
@@ -309,4 +472,9 @@ export type RevertInput = {
   pageId: string;
   versionId: string;
   authorAdminId: string;
+};
+
+export type UpdateVersionSummaryInput = {
+  versionId: string;
+  summary: string;
 };

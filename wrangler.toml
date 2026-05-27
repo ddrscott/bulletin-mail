@@ -72,6 +72,14 @@ new_sqlite_classes = ["TenantWikiDO"]
 binding = "WIKI_R2"
 bucket_name = "bulletinmail-wiki"
 
+# Workers AI — used by the wiki to summarize edits for the activity feed.
+# The model id and prompt live in server/wiki/summary.ts. Pricing: per-call
+# on the llama 70b family; one diff per page save → well under 1¢ per save
+# at any realistic rate. Privacy: Workers AI doesn't retain inputs/outputs
+# beyond serving the request (CF policy as of 2026-05).
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true
 
