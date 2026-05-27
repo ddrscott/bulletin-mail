@@ -3,7 +3,7 @@ import {
   generateMagicLinkToken,
   MAGIC_LINK_LIFETIME_MS,
   renderMagicLinkEmail,
-} from "../src/worker/lib/magic-link.js";
+} from "../server/lib/magic-link.js";
 import type { InstanceConfig } from "@bulletinmail/shared";
 
 const config: InstanceConfig = {

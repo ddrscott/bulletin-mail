@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Build script for the admin SPA → apps/web/dist/admin/.
+ * Build script for the admin SPA → dist/admin/.
  *
  * Emits the SPA under /admin/ so Workers Assets serves it at <host>/admin/
- * on both the apex (post-collapse) and <tenant>.<apex>. Bundles src/admin/main.ts
- * via esbuild, bundles src/admin/styles.css (resolves the
+ * on both the apex (post-collapse) and <tenant>.<apex>. Bundles admin/main.ts
+ * via esbuild, bundles admin/styles.css (resolves the
  * @bulletinmail/shared/design/* imports via esbuild's CSS bundler), and copies
  * index.html. Astro build creates dist/ first; this script writes into dist/admin/.
  */
@@ -27,7 +27,7 @@ await mkdir(distAdmin, { recursive: true });
 await copyFile(`${root}public/favicon.svg`, `${dist}/favicon.svg`);
 
 await build({
-  entryPoints: [`${root}src/admin/main.ts`],
+  entryPoints: [`${root}admin/main.ts`],
   bundle: true,
   format: "esm",
   target: "es2022",
@@ -38,7 +38,7 @@ await build({
 });
 
 await build({
-  entryPoints: [`${root}src/admin/styles.css`],
+  entryPoints: [`${root}admin/styles.css`],
   bundle: true,
   outfile: `${distAdmin}/styles.css`,
   loader: { ".woff2": "file" },
@@ -46,7 +46,7 @@ await build({
   logLevel: "info",
 });
 
-const html = await readFile(`${root}src/admin/index.html`, "utf8");
+const html = await readFile(`${root}admin/index.html`, "utf8");
 await writeFile(`${distAdmin}/index.html`, html);
 
 console.log(`built → ${distAdmin}`);

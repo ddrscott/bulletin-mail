@@ -10,8 +10,8 @@
   "exclude": [
     "dist",
     "node_modules",
-    "src/worker",
-    "src/admin",
+    "server",
+    "admin",
     "workers",
     "packages",
     "cli"

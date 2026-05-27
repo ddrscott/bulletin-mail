@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBulkEmails } from "../src/worker/routes/admin/members.js";
+import { parseBulkEmails } from "../server/routes/admin/members.js";
 
 describe("parseBulkEmails", () => {
   it("returns empty for empty input", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileMarkdown } from "../src/worker/wiki/markdown.js";
+import { compileMarkdown } from "../server/wiki/markdown.js";
 
 describe("compileMarkdown — wiki links", () => {
   it("renders [[Page Name]] as a kebab-case wiki link", () => {

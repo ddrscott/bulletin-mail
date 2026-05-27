@@ -6,7 +6,7 @@ import {
   readSessionCookieFromHeader,
   SESSION_COOKIE_NAME,
   verifySessionCookie,
-} from "../src/worker/lib/session.js";
+} from "../server/lib/session.js";
 
 const SECRET = "test-secret-1234567890abcdef";
 

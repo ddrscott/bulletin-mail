@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "src/worker/index.ts",
+  "main": "server/index.ts",
   "description": "Open-source multi-tenant mailing list service on Cloudflare's developer platform.",
   "license": "AGPL-3.0-only",
   "homepage": "https://bulletinmail.org",
@@ -33,7 +33,7 @@
     "deploy:sender": "pnpm --filter @bulletinmail/sender deploy",
 
     "test": "vitest run --passWithNoTests && pnpm -r test",
-    "typecheck": "astro check && tsc --noEmit -p src/worker/tsconfig.json && tsc --noEmit -p src/admin/tsconfig.json && pnpm -r typecheck",
+    "typecheck": "astro check && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p admin/tsconfig.json && pnpm -r typecheck",
     "lint": "pnpm -r lint",
 
     "render-wrangler": "tsx scripts/render-wrangler.ts",

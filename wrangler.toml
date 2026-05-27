@@ -22,7 +22,7 @@
 # wrangler.generated.toml with the actual route pattern and zone.
 
 name = "bulletinmail-web"
-main = "src/worker/index.ts"
+main = "server/index.ts"
 compatibility_date = "2026-05-01"
 compatibility_flags = ["nodejs_compat"]
 
