@@ -5,27 +5,27 @@
  * relaytty.com: one Worker handles *all* HTTP traffic for the apex and every
  * subdomain. Route dispatch then keys off the Host header.
  *
- * Examples (apex = "example.org", adminDomain = "app.example.org"):
+ * Examples (apex = "example.org"):
  *
  *   "example.org"                → { kind: "apex" }
  *   "example.org:8787"           → { kind: "apex" }   (port stripped)
- *   "app.example.org"            → { kind: "admin" }
  *   "firstpresby.example.org"    → { kind: "tenant", slug: "firstpresby" }
  *   "x.y.example.org"            → { kind: "unknown" } (multi-level subdomain)
  *   "evil.com"                   → { kind: "unknown" } (wrong apex)
+ *
+ * Site admin lives at <apex>/admin/* (post-consolidation). There is no
+ * separate admin subdomain — host classifier returns apex/tenant/unknown.
  *
  * Returns "unknown" — not null — so callers must explicitly handle the case.
  */
 
 export type HostKind =
   | { kind: "apex" }
-  | { kind: "admin" }
   | { kind: "tenant"; slug: string }
   | { kind: "unknown" };
 
 export type HostConfig = {
   apexDomain: string;
-  adminDomain: string;
 };
 
 export function classifyHost(host: string, config: HostConfig): HostKind {
@@ -33,7 +33,6 @@ export function classifyHost(host: string, config: HostConfig): HostKind {
   if (!hostname) return { kind: "unknown" };
 
   if (hostname === config.apexDomain) return { kind: "apex" };
-  if (hostname === config.adminDomain) return { kind: "admin" };
 
   const suffix = "." + config.apexDomain;
   if (!hostname.endsWith(suffix)) return { kind: "unknown" };
@@ -47,7 +46,7 @@ export function classifyHost(host: string, config: HostConfig): HostKind {
 
 /**
  * Convenience: return the tenant slug or null. Use classifyHost() when you
- * need to distinguish apex vs admin vs unknown.
+ * need to distinguish apex vs tenant vs unknown.
  */
 export function extractTenantSlug(host: string, config: HostConfig): string | null {
   const result = classifyHost(host, config);

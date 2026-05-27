@@ -2,7 +2,6 @@
   "$schema": "./packages/shared/instance.config.schema.json",
 
   "apexDomain": "example.org",
-  "adminDomain": "app.example.org",
   "productName": "Example Lists",
   "productNameShort": "Lists",
   "tagline": "Mailing lists for our organization",
@@ -15,7 +14,6 @@
 
   "archiveUrlTemplate": "https://example.org/g/{tenant}/{group}",
   "unsubscribeUrlTemplate": "https://example.org/u/{token}",
-  "adminUrl": "https://app.example.org",
 
   "additionalReservedSlugs": [],
   "minSlugLength": 3,

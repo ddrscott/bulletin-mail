@@ -10,13 +10,11 @@ import {
 
 const fullEnv = {
   INSTANCE_APEX_DOMAIN: "example.org",
-  INSTANCE_ADMIN_DOMAIN: "app.example.org",
   INSTANCE_PRODUCT_NAME: "Example Lists",
   INSTANCE_PRODUCT_NAME_SHORT: "Lists",
   INSTANCE_TAGLINE: "tag",
   INSTANCE_ARCHIVE_URL: "https://example.org/g/{tenant}/{group}",
   INSTANCE_UNSUB_URL: "https://example.org/u/{token}",
-  INSTANCE_ADMIN_URL: "https://app.example.org",
   INSTANCE_OPERATOR_LEGAL_NAME: "Example Org",
   INSTANCE_OPERATOR_MAILING_ADDRESS: "123 Main",
   INSTANCE_OPERATOR_CONTACT_URL: "https://example.org/contact",

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="BulletinMail">
+  <title>BulletinMail</title>
+  <style>
+    .ink { fill: #1A1814; }
+    .paper { fill: #FAF8F2; }
+    @media (prefers-color-scheme: dark) {
+      .ink { fill: #FAF8F2; }
+      .paper { fill: #1A1814; }
+    }
+  </style>
+  <rect class="paper" width="32" height="32" rx="4"/>
+  <circle class="ink" cx="6.5" cy="5.5" r="2.2"/>
+  <rect class="ink" x="4" y="10" width="24" height="17" rx="1"/>
+  <polygon class="paper" points="4,10 28,10 16,19"/>
+</svg>

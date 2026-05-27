@@ -24,30 +24,33 @@ importers:
         specifier: ^3.90.0
         version: 3.114.17(@cloudflare/workers-types@4.20260525.1)
 
-  apps/admin:
-    dependencies:
-      '@bulletinmail/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-    devDependencies:
-      esbuild:
-        specifier: ^0.24.0
-        version: 0.24.2
-
-  apps/docs:
+  apps/web:
     dependencies:
       '@astrojs/starlight':
         specifier: ^0.30.0
         version: 0.30.6(astro@5.18.1(@types/node@24.12.4)(rollup@4.60.4)(tsx@4.22.3)(typescript@5.9.3))
+      '@bulletinmail/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@bulletinmail/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       astro:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@24.12.4)(rollup@4.60.4)(tsx@4.22.3)(typescript@5.9.3)
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.23
+      marked:
+        specifier: ^15.0.0
+        version: 15.0.12
       sharp:
         specifier: ^0.33.0
         version: 0.33.5
+    devDependencies:
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
 
   cli:
     dependencies:
@@ -118,21 +121,6 @@ importers:
       '@bulletinmail/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-
-  workers/web:
-    dependencies:
-      '@bulletinmail/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@bulletinmail/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      hono:
-        specifier: ^4.6.0
-        version: 4.12.23
-      marked:
-        specifier: ^15.0.0
-        version: 15.0.12
 
 packages:
 

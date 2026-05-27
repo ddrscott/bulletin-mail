@@ -1,0 +1,87 @@
+# Web Worker — single HTTP entry for the whole instance.
+#
+# Following the same single-Worker / wildcard-route pattern as relaytty.com:
+# one Worker, one project, host-based dispatch inside the handler. Covers:
+#   - apex landing (rendered by mountLanding)
+#   - /docs/*               (Astro Starlight, served via [assets])
+#   - /admin/*              (admin SPA, served via [assets])
+#   - /u/:token             (one-click unsubscribe, RFC 8058)
+#   - /c/:token             (double-opt-in confirmation)
+#   - /g/:tenant/:group     (archive viewer, Phase 2)
+#   - /api/bounce-events    (Email Service webhook)
+#   - /contact              (contact form → Discord webhook)
+#   - /health
+#   - <tenant>.<apex>/*     (per-tenant wiki + admin SPA)
+#
+# Inbound (email) and sender (queue) stay as separate Workers because they
+# aren't HTTP — Email Routing and Queue invoke them directly. Everything
+# web-facing lives in this project.
+#
+# This file is committed for local dev with example.org placeholders. For real
+# deployment, run `pnpm render-wrangler --instance <your-apex>` to emit
+# wrangler.generated.toml with the actual route pattern and zone.
+
+name = "bulletinmail-web"
+main = "src/worker/index.ts"
+compatibility_date = "2026-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Two routes cover the entire instance:
+#  - `example.org/*` — apex catch-all (landing, docs, admin, narrow routes)
+#  - `*.example.org/*` — every subdomain (tenant wikis + tenant admin)
+# Host-based dispatch inside the Worker handles the kind distinction.
+routes = [
+  { pattern = "example.org/*", zone_name = "example.org" },
+  { pattern = "*.example.org/*", zone_name = "example.org" }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bulletinmail"
+database_id = "PLACEHOLDER_LOCAL_DEV"
+
+# Unified static-asset directory — built by `astro build && node build-admin.mjs`.
+# Contains: /docs/* (Astro/Starlight), /admin/* (admin SPA), /_astro/*, /pagefind/*,
+# favicon.svg. Landing page at `/` is server-rendered by mountLanding — not in dist.
+#
+# `run_worker_first = true` ensures the Worker runs first on every request so the
+# host-based dispatch decides whether to handle in Hono or fall through to ASSETS.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
+
+# Magic-link sign-in emails are sent from this Worker (transactional, one-off).
+# Same Cloudflare Email Service authorization as the sender Worker — outbound
+# From must be on the apex (PRD §17 #6).
+[[send_email]]
+name = "EMAIL"
+
+# Per-tenant wiki. One Durable Object instance per tenant (sharded by
+# idFromName(tenant.slug)). Each DO carries its own SQLite database for pages
+# + version history.
+[[durable_objects.bindings]]
+name = "WIKI"
+class_name = "TenantWikiDO"
+
+[[migrations]]
+tag = "v1-wiki"
+new_sqlite_classes = ["TenantWikiDO"]
+
+[[r2_buckets]]
+binding = "WIKI_R2"
+bucket_name = "bulletinmail-wiki"
+
+[observability]
+enabled = true
+
+[vars]
+INSTANCE_APEX_DOMAIN = "example.org"
+INSTANCE_PRODUCT_NAME = "Example Lists"
+INSTANCE_PRODUCT_NAME_SHORT = "Lists"
+INSTANCE_TAGLINE = "Mailing lists for our organization"
+INSTANCE_ARCHIVE_URL = "https://example.org/g/{tenant}/{group}"
+INSTANCE_UNSUB_URL = "https://example.org/u/{token}"
+INSTANCE_OPERATOR_LEGAL_NAME = "Example Org"
+INSTANCE_OPERATOR_MAILING_ADDRESS = "123 Main St, Anytown, US 00000"
+INSTANCE_OPERATOR_CONTACT_URL = "https://example.org/contact"

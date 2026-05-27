@@ -21,7 +21,6 @@
 export type InstanceConfig = {
   // Identity
   apexDomain: string;
-  adminDomain: string;
   productName: string;
   productNameShort: string;
   tagline: string;
@@ -36,7 +35,6 @@ export type InstanceConfig = {
   // URL templates: {tenant}, {group}, {token}, {apex} are substituted.
   archiveUrlTemplate: string;
   unsubscribeUrlTemplate: string;
-  adminUrl: string;
 
   // Slug policy (merged with packages/shared/src/slug.ts BASE_RESERVED_SLUGS)
   additionalReservedSlugs: readonly string[];
@@ -132,7 +130,6 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
 
   return {
     apexDomain: required("INSTANCE_APEX_DOMAIN"),
-    adminDomain: required("INSTANCE_ADMIN_DOMAIN"),
     productName: required("INSTANCE_PRODUCT_NAME"),
     productNameShort: required("INSTANCE_PRODUCT_NAME_SHORT"),
     tagline: required("INSTANCE_TAGLINE"),
@@ -148,7 +145,6 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
 
     archiveUrlTemplate: required("INSTANCE_ARCHIVE_URL"),
     unsubscribeUrlTemplate: required("INSTANCE_UNSUB_URL"),
-    adminUrl: required("INSTANCE_ADMIN_URL"),
 
     additionalReservedSlugs: csv("INSTANCE_RESERVED_SLUGS"),
     minSlugLength: numberOr("INSTANCE_MIN_SLUG_LENGTH", defaults.minSlugLength),

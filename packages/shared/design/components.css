@@ -313,30 +313,41 @@ hr {
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.btn--primary {
+/* Variant selectors are prefixed with `.btn` (compound class) so their
+ * specificity is (0,2,0) — high enough to beat the base rule's `a.btn` and
+ * `button.btn` (0,1,1), the global `a:visited` rule (0,1,1), and Starlight's
+ * `.sl-markdown-content a:hover:not(:where(.not-content *))` (0,2,1) once the
+ * `:hover` pseudo-class bumps the variant to (0,3,0). Without the prefix the
+ * variant only matches at (0,1,0) and the base styles win — so `<a class="btn
+ * btn--primary">` renders as paper-on-ink default instead of the inverse. */
+.btn.btn--primary {
   background: var(--ink);
   border-color: var(--ink);
   color: var(--paper);
 }
-.btn--primary:hover {
-  filter: brightness(1.08);
-  background: var(--ink);
+/* Hover inverts: paper bg + ink text. brightness() was imperceptible on
+ * near-black; inversion gives a clear affordance and matches the broadsheet
+ * outline-button look. Border already var(--ink) so it doubles as the
+ * outline. The base .btn transition animates background/color/border. */
+.btn.btn--primary:hover {
+  background: var(--paper);
+  color: var(--ink);
 }
 
-.btn--alert {
+.btn.btn--alert {
   border-color: var(--alert);
   color: var(--alert);
   background: var(--paper);
 }
-.btn--alert:hover { background: var(--alert-tint); }
+.btn.btn--alert:hover { background: var(--alert-tint); color: var(--alert); }
 
-.btn--ghost {
+.btn.btn--ghost {
   border-color: transparent;
   background: transparent;
 }
-.btn--ghost:hover { background: var(--paper-2); border-color: var(--rule); }
+.btn.btn--ghost:hover { background: var(--paper-2); border-color: var(--rule); }
 
-.btn--small { font-size: var(--text-xs); padding: var(--space-1) var(--space-3); min-height: 28px; }
+.btn.btn--small { font-size: var(--text-xs); padding: var(--space-1) var(--space-3); min-height: 28px; }
 
 /* -------------------------------------------------------------------------
  * Form fields

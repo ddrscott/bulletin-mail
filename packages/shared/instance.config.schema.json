@@ -6,13 +6,11 @@
   "type": "object",
   "required": [
     "apexDomain",
-    "adminDomain",
     "productName",
     "productNameShort",
     "tagline",
     "archiveUrlTemplate",
     "unsubscribeUrlTemplate",
-    "adminUrl",
     "operator"
   ],
   "additionalProperties": false,
@@ -23,10 +21,6 @@
       "type": "string",
       "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$",
       "description": "Root domain serving the instance, e.g. 'lists.example.org'."
-    },
-    "adminDomain": {
-      "type": "string",
-      "description": "Subdomain serving the admin app, e.g. 'app.lists.example.org'."
     },
     "productName": { "type": "string", "minLength": 1 },
     "productNameShort": { "type": "string", "minLength": 1 },
@@ -50,7 +44,6 @@
       "type": "string",
       "description": "URL template; supports {token}, {apex}."
     },
-    "adminUrl": { "type": "string", "format": "uri" },
 
     "additionalReservedSlugs": {
       "type": "array",

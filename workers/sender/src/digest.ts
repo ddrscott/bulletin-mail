@@ -52,7 +52,9 @@ async function sendTenantDigest(env: DigestEnv, config: InstanceConfig, tenantId
   if (admins.length === 0 || pending.length === 0) return;
 
   const from = systemAddress(config, "noreply");
-  const adminUrl = config.adminUrl;
+  // Tenant admins land on their own subdomain's /admin — that's where the
+  // pending-approvals queue lives.
+  const adminUrl = `https://${tenant.slug}.${config.apexDomain}/admin/`;
   const mail = renderDigestEmail(config, tenant, pending, adminUrl);
 
   for (const admin of admins) {

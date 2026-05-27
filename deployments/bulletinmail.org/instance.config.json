@@ -2,7 +2,6 @@
   "$schema": "../../packages/shared/instance.config.schema.json",
 
   "apexDomain": "bulletinmail.org",
-  "adminDomain": "app.bulletinmail.org",
   "productName": "BulletinMail",
   "productNameShort": "Bulletin",
   "tagline": "Mailing lists that just work.",
@@ -15,7 +14,6 @@
 
   "archiveUrlTemplate": "https://bulletinmail.org/g/{tenant}/{group}",
   "unsubscribeUrlTemplate": "https://bulletinmail.org/u/{token}",
-  "adminUrl": "https://app.bulletinmail.org",
 
   "additionalReservedSlugs": [],
   "minSlugLength": 3,
@@ -27,7 +25,7 @@
   "operator": {
     "legalName": "Left Join Studio, Inc.",
     "mailingAddress": "2501 Chatham Rd, Springfield, IL 62704",
-    "contactUrl": "https://bulletinmail.org/legal/privacy/"
+    "contactUrl": "https://bulletinmail.org/contact"
   },
 
   "features": {

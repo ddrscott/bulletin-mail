@@ -47,7 +47,6 @@ if (!existsSync(configPath)) {
 
 type InstanceOverlay = {
   apexDomain: string;
-  adminDomain: string;
   productName: string;
   productNameShort: string;
   tagline: string;
@@ -58,7 +57,6 @@ type InstanceOverlay = {
   unsubscribeAddressPrefix?: string;
   archiveUrlTemplate: string;
   unsubscribeUrlTemplate: string;
-  adminUrl: string;
   additionalReservedSlugs?: string[];
   minSlugLength?: number;
   maxSlugLength?: number;
@@ -94,13 +92,11 @@ const tomlStr = (s: string | number | boolean): string => JSON.stringify(String(
 function renderVarsBlock(): string {
   const required: Array<[string, string | number | boolean]> = [
     ["INSTANCE_APEX_DOMAIN", config.apexDomain],
-    ["INSTANCE_ADMIN_DOMAIN", config.adminDomain],
     ["INSTANCE_PRODUCT_NAME", config.productName],
     ["INSTANCE_PRODUCT_NAME_SHORT", config.productNameShort],
     ["INSTANCE_TAGLINE", config.tagline],
     ["INSTANCE_ARCHIVE_URL", config.archiveUrlTemplate],
     ["INSTANCE_UNSUB_URL", config.unsubscribeUrlTemplate],
-    ["INSTANCE_ADMIN_URL", config.adminUrl],
     ["INSTANCE_OPERATOR_LEGAL_NAME", config.operator.legalName],
     ["INSTANCE_OPERATOR_MAILING_ADDRESS", config.operator.mailingAddress],
     ["INSTANCE_OPERATOR_CONTACT_URL", config.operator.contactUrl],
@@ -147,10 +143,7 @@ type WorkerEntry = {
 const WORKERS: WorkerEntry[] = [
   { name: "inbound", dir: "workers/inbound", hasVars: true },
   { name: "sender", dir: "workers/sender", hasVars: true },
-  { name: "web", dir: "workers/web", hasVars: true },
-  // Docs is a pure static-assets Worker. No [vars] (Astro substitutes at
-  // build time), only routes get apex substitution.
-  { name: "docs", dir: "apps/docs", hasVars: false },
+  { name: "web", dir: "apps/web", hasVars: true },
 ];
 
 for (const w of WORKERS) {
