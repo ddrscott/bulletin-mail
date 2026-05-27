@@ -30,6 +30,9 @@ name = "EMAIL"
 [triggers]
 crons = ["0 14 * * *"]
 
+[observability]
+enabled = true
+
 [vars]
 INSTANCE_APEX_DOMAIN = "example.org"
 INSTANCE_ADMIN_DOMAIN = "app.example.org"

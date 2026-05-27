@@ -28,6 +28,9 @@ bucket_name = "bulletinmail-attachments"
 binding = "SEND_QUEUE"
 queue = "bulletinmail-send"
 
+[observability]
+enabled = true
+
 [vars]
 INSTANCE_APEX_DOMAIN = "example.org"
 INSTANCE_ADMIN_DOMAIN = "app.example.org"
