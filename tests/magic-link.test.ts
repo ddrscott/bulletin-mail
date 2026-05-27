@@ -24,7 +24,7 @@ const config: InstanceConfig = {
   defaultDailyMessageLimitPerTenant: 1000,
   defaultMaxRecipientsPerGroup: 500,
   operator: { legalName: "Example Org", mailingAddress: "...", contactUrl: "..." },
-  features: { byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false },
+  features: { byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false, singleTenant: false },
 };
 
 describe("generateMagicLinkToken", () => {

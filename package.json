@@ -24,11 +24,13 @@
 
     "build": "pnpm build:web && pnpm -r build",
     "build:web": "astro build && node build-admin.mjs",
+    "build:web:single": "node build-admin.mjs",
     "build:docs": "astro build",
     "build:admin": "node build-admin.mjs",
     "preview": "astro preview",
 
     "deploy": "wrangler deploy --config wrangler.generated.toml",
+    "deploy:single": "pnpm build:web:single && wrangler deploy --config wrangler.generated.toml",
     "deploy:inbound": "pnpm --filter @bulletinmail/inbound deploy",
     "deploy:sender": "pnpm --filter @bulletinmail/sender deploy",
 

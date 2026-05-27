@@ -81,7 +81,12 @@
       "properties": {
         "byoDomainEnabled": { "type": "boolean", "default": false },
         "publicArchivesAllowed": { "type": "boolean", "default": true },
-        "signupSelfService": { "type": "boolean", "default": false }
+        "signupSelfService": { "type": "boolean", "default": false },
+        "singleTenant": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the apex domain IS the tenant (no <slug>.<apex> subdomains). The wiki, /admin/, /join/, /auth/ all serve from the apex root. The single tenant is identified by the fixed slug 'main'. First admin signup atomically creates the tenant row + admin. The marketing landing page and Astro docs are skipped. Set this in the deployments/<apex>/instance.config.json overlay for single-org deployments."
+        }
       }
     }
   }

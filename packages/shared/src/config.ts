@@ -57,8 +57,23 @@ export type InstanceConfig = {
     byoDomainEnabled: boolean;
     publicArchivesAllowed: boolean;
     signupSelfService: boolean;
+    /**
+     * Single-tenant deployment mode. When true, the apex domain IS the
+     * tenant — the wiki, /admin/, /join/, /auth/ serve from the apex root
+     * with no tenant subdomain. The single tenant is identified by the
+     * fixed slug SINGLE_TENANT_SLUG ("main"). First signup creates the
+     * tenant + admin atomically. Marketing landing + Astro docs build
+     * are skipped. Reference deployment leaves this false; per-client
+     * single-org deploys flip it on in their overlay.
+     */
+    singleTenant: boolean;
   };
 };
+
+/** Tenant slug used in single-tenant deployments. The host classifier
+ * remaps `<apex>` → { kind: "tenant", slug: SINGLE_TENANT_SLUG } when
+ * features.singleTenant is true. */
+export const SINGLE_TENANT_SLUG = "main";
 
 /**
  * Defaults applied when an operator omits an optional field. Required fields
@@ -83,6 +98,7 @@ export const defaults = {
     byoDomainEnabled: false,
     publicArchivesAllowed: true,
     signupSelfService: false,
+    singleTenant: false,
   },
 } as const;
 
@@ -177,6 +193,10 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
       signupSelfService: boolOr(
         "INSTANCE_FEATURE_SIGNUP_SELF_SERVICE",
         defaults.features.signupSelfService,
+      ),
+      singleTenant: boolOr(
+        "INSTANCE_FEATURE_SINGLE_TENANT",
+        defaults.features.singleTenant,
       ),
     },
   };

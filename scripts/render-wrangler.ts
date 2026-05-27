@@ -67,6 +67,7 @@ type InstanceOverlay = {
     byoDomainEnabled?: boolean;
     publicArchivesAllowed?: boolean;
     signupSelfService?: boolean;
+    singleTenant?: boolean;
   };
 };
 
@@ -114,6 +115,7 @@ function renderVarsBlock(): string {
     ["INSTANCE_FEATURE_BYO_DOMAIN", config.features?.byoDomainEnabled],
     ["INSTANCE_FEATURE_PUBLIC_ARCHIVES", config.features?.publicArchivesAllowed],
     ["INSTANCE_FEATURE_SIGNUP_SELF_SERVICE", config.features?.signupSelfService],
+    ["INSTANCE_FEATURE_SINGLE_TENANT", config.features?.singleTenant],
   ];
   const reserved = config.additionalReservedSlugs ?? [];
   if (reserved.length > 0) {

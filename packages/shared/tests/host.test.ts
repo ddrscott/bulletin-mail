@@ -59,3 +59,33 @@ describe("extractTenantSlug", () => {
     expect(extractTenantSlug("evil.com", config)).toBeNull();
   });
 });
+
+describe("classifyHost — single-tenant mode", () => {
+  const cfg = { apexDomain: "example.org", singleTenant: true };
+
+  it("treats the apex as tenant 'main'", () => {
+    expect(classifyHost("example.org", cfg)).toEqual({ kind: "tenant", slug: "main" });
+  });
+
+  it("strips the port and still maps to 'main'", () => {
+    expect(classifyHost("example.org:8787", cfg)).toEqual({ kind: "tenant", slug: "main" });
+  });
+
+  it("rejects subdomains (single-tenant doesn't use them)", () => {
+    // The subdomain is still a tenant slug per the classifier, but since the
+    // single-tenant deployment will only have a 'main' tenant row, lookups
+    // will 404 — the classifier itself doesn't reject the shape.
+    expect(classifyHost("anything.example.org", cfg)).toEqual({
+      kind: "tenant",
+      slug: "anything",
+    });
+  });
+
+  it("rejects wrong apex", () => {
+    expect(classifyHost("evil.com", cfg)).toEqual({ kind: "unknown" });
+  });
+
+  it("lowercases the host", () => {
+    expect(classifyHost("Example.ORG", cfg)).toEqual({ kind: "tenant", slug: "main" });
+  });
+});

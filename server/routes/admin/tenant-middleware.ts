@@ -18,6 +18,7 @@
  */
 
 import type { Context, MiddlewareHandler } from "hono";
+import { classifyHost } from "@bulletinmail/shared";
 import type { AppVariables, Env } from "../../types.js";
 import { resolveTenantContext } from "../../wiki/tenant-auth.js";
 
@@ -53,12 +54,15 @@ export const requireTenantAdmin: MiddlewareHandler<{
 };
 
 export function currentTenantSlug(c: Ctx): string | null {
-  const host = (c.req.header("Host") ?? "").toLowerCase();
-  const apex = c.var.config.apexDomain.toLowerCase();
-  if (!host.endsWith(`.${apex}`)) return null;
-  const slug = host.slice(0, host.length - apex.length - 1);
-  if (!slug || slug === "app" || slug === "www") return null;
-  return slug;
+  // Defer to the shared host classifier so single-tenant mode's apex →
+  // tenant remap (slug 'main') flows through here unchanged. classifyHost
+  // reads features.singleTenant out of the InstanceConfig shape directly.
+  const result = classifyHost(c.req.header("Host") ?? "", c.var.config);
+  if (result.kind !== "tenant") return null;
+  // Legacy carve-outs that classifyHost intentionally doesn't apply
+  // (those subdomains are reserved for the marketing site / future use).
+  if (result.slug === "app" || result.slug === "www") return null;
+  return result.slug;
 }
 
 /** Stricter: only role='admin' (not moderator) may proceed. */

@@ -13,6 +13,14 @@
  * (site admin at /admin/*, docs at /docs/*, landing at /). The separate
  * `app.<apex>` admin host was collapsed into the apex; classifyHost no
  * longer has an "admin" kind.
+ *
+ * Single-tenant mode (features.singleTenant): classifyHost remaps the
+ * apex to { kind: "tenant", slug: "main" }, so the landing route's
+ * existing "kind !== apex → next()" guard automatically falls through
+ * to the wiki routes. No special-case mounting needed below — the
+ * single classifier change does the work. mountLanding stays registered
+ * (it just never fires in single-tenant mode). Site-admin endpoints
+ * (mountTenants, siteSignup) become unreachable for the same reason.
  */
 
 import { Hono } from "hono";
