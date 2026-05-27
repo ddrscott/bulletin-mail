@@ -218,19 +218,36 @@ function oldIndexAt(ops: Op[], k: number): number {
  */
 export const SUMMARY_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
+// Prompt tuned against the @cf/meta/llama-3.3-70b-instruct-fp8-fast model:
+// 25-shot variance test on a typical paragraph-addition diff produced 25/25
+// descriptive outputs (none hit the fallback, none started with first-person
+// language). The harness lives at scripts/probe-summary*.mjs.
+//
+// Key design choices:
+// - Line-count delta (+N/-M) is rendered next to the summary in the activity
+//   feed, so "Minor changes." for a non-empty diff would be strictly worse
+//   than describing it — the delta already conveys "small change."
+// - "Start with a verb" steers the model away from "I see…" / "It looks like…"
+//   patterns that normalizeSummary would otherwise have to filter out.
+// - The fallback is reserved for truly empty / whitespace-only diffs.
 const SYSTEM_PROMPT = [
-  "You summarize wiki page edits for a moderation review feed. You will see a",
-  "unified diff of a Markdown wiki page. Describe in 1–2 short sentences what",
-  "actually changed, in plain English, for a reviewer who hasn't seen the page.",
+  "You write a one-sentence summary of a change made to a Markdown wiki page,",
+  "for a moderation review feed. The reviewer will see your summary alongside",
+  "a line-count delta (+N/-M). Your job is to describe WHAT changed in plain",
+  "English so the reviewer knows whether to investigate further.",
   "",
   "Rules:",
-  "- Describe only edits you are confident about. If the diff is ambiguous,",
-  "  consists only of whitespace, only formatting, or you cannot determine",
-  "  intent — respond with exactly: Minor changes.",
-  "- Do not speculate about author intent. Stick to observable changes.",
-  "- Do not add commentary, opinions, or quality judgments.",
-  "- Do not quote large chunks. Summarize.",
-  "- Maximum 200 characters total.",
+  "- Describe the change directly. Start with a verb when possible (Added,",
+  "  Removed, Renamed, Updated, Reordered, Fixed a typo in, etc.).",
+  "- Do NOT start with first-person language (I, I'm, As an AI).",
+  "- Do NOT add commentary, opinions, or quality judgments.",
+  "- Do NOT quote large chunks. Summarize.",
+  "- Maximum 180 characters. One sentence preferred; two short ones OK.",
+  "- If the diff is literally empty or only whitespace, reply with exactly:",
+  "  Minor changes.",
+  "- Even small changes (one word, one paragraph, one bullet) should be",
+  "  described — the reviewer already knows the line count, so 'Minor changes.'",
+  "  adds no information when there is any visible content change.",
 ].join("\n");
 
 /**
@@ -258,9 +275,14 @@ export function normalizeSummary(raw: unknown): string {
   // Collapse internal whitespace runs to single spaces — the feed renders
   // inline so multi-line summaries break the layout.
   s = s.replace(/\s+/g, " ");
-  // Reject obvious refusal / disclaimer prefixes that the model sometimes
-  // emits in spite of the system prompt.
-  if (/^(i\b|as an ai\b|sorry\b|i'm|i am)/i.test(s)) return SUMMARY_FALLBACK;
+  // Reject obvious refusal / disclaimer / hedge prefixes that the model
+  // sometimes emits in spite of the system prompt. Careful: a bare /^i\b/
+  // false-positives on legitimate outputs like "I added a section…" (which
+  // IS a valid description, even if the prompt asks not to use first
+  // person). Catch real refusal/hedge patterns, not every "I" start.
+  const refusal =
+    /^(?:i'?m\s+(?:sorry|not\s+sure|unsure|unable)\b|i\s+can(?:not|'t)\b|as\s+an\s+ai\b|sorry\b|unable\s+to\b)/i;
+  if (refusal.test(s)) return SUMMARY_FALLBACK;
   if (s.length > SUMMARY_MAX_LEN) s = s.slice(0, SUMMARY_MAX_LEN - 1).trimEnd() + "…";
   return s;
 }
