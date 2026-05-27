@@ -198,15 +198,6 @@ header.masthead.masthead--chrome {
  * and an indented item list. We pull it in close so the prose column gets
  * more room and the TOC reads as a tight column of secondary links.
  * ------------------------------------------------------------------------- */
-:root {
-  /* Starlight reads this for the TOC width. Default is ~16rem. */
-  --sl-sidebar-width: 14rem;
-}
-
-.right-sidebar-container,
-.right-sidebar {
-  padding-inline: var(--space-3) !important;
-}
 .right-sidebar starlight-toc h2 {
   font-family: var(--font-sans);
   font-size: var(--text-xs);

@@ -1,16 +1,12 @@
 import { defineCollection } from "astro:content";
-import { glob } from "astro/loaders";
+import { docsLoader } from "@astrojs/starlight/loaders";
 import { docsSchema } from "@astrojs/starlight/schema";
 
-// Docs live at the repo root in /docs/ — that's the canonical source. Astro's
-// content collection points at it via the glob loader's `base` option,
-// eliminating the previous duplicated tree at src/content/docs/. Editors and
-// GitHub readers see /docs/ as the home; Starlight reads through this binding.
-//
-// `base` is relative to the project root (where astro.config.mjs lives).
+// Starlight's docsLoader reads from src/content/docs/ — a symlink there points
+// at /docs/ at the repo root. The canonical content lives at the root so it's
+// GitHub-readable and easy to find; the symlink lets Starlight's loader +
+// sidebar autogenerate work unmodified (a custom glob loader's ID format
+// doesn't match Starlight's autogenerate filter).
 export const collections = {
-  docs: defineCollection({
-    loader: glob({ pattern: "**/*.{md,mdx}", base: "./docs" }),
-    schema: docsSchema(),
-  }),
+  docs: defineCollection({ loader: docsLoader(), schema: docsSchema() }),
 };
