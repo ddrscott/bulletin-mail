@@ -201,10 +201,12 @@ header.masthead.masthead--chrome {
 }
 
 /* Content panel horizontal inset matches the chrome masthead so the page's
-   left/right edges are consistent. */
-.sl-container { padding-inline: var(--space-5); }
-@media (min-width: 900px)  { .sl-container { padding-inline: var(--space-7); } }
-@media (min-width: 1200px) { .sl-container { padding-inline: var(--space-8); } }
+ * left/right edges are consistent. Scoped to .content-panel — the bare
+ * `.sl-container` selector would also hit the right TOC's container and
+ * strangle its text width with 24-64px of inherited padding-inline. */
+.content-panel .sl-container { padding-inline: var(--space-5); }
+@media (min-width: 900px)  { .content-panel .sl-container { padding-inline: var(--space-7); } }
+@media (min-width: 1200px) { .content-panel .sl-container { padding-inline: var(--space-8); } }
 
 /* -------------------------------------------------------------------------
  * Right-side table of contents — tighter inset, less visual chrome
@@ -213,11 +215,9 @@ header.masthead.masthead--chrome {
  * and an indented item list. We pull it in close so the prose column gets
  * more room and the TOC reads as a tight column of secondary links.
  * ------------------------------------------------------------------------- */
-/* Starlight constrains the right TOC's .sl-container to roughly 25% of
- * leftover viewport at >=72rem, which makes entries like 'The pipeline in
- * one paragraph' wrap to 3+ lines. Override so the TOC gets the full sidebar
- * width minus its panel padding (Starlight's own formula but without the
- * .25 multiplier). */
+/* Starlight's max-width formula on .sl-container at >=72rem clamps to ~25%
+ * of leftover viewport, which makes entries like 'The pipeline in one
+ * paragraph' wrap to 3+ lines. Override to match its base width formula. */
 @media (min-width: 72rem) {
   .right-sidebar-panel .sl-container {
     max-width: calc(var(--sl-sidebar-width) - 2 * var(--sl-sidebar-pad-x));
