@@ -5,6 +5,9 @@ node_modules/
 dist/
 *.log
 *.tsbuildinfo
+
+# Local secrets (wrangler dev reads .dev.vars next to wrangler.toml)
+.dev.vars
 .env
 .env.local
 .env.*.local
@@ -18,11 +21,11 @@ dist/
 instance.config.local.json
 
 # Generated wrangler [vars] (rendered from instance.config.json at deploy time)
+wrangler.generated.toml
 workers/*/wrangler.generated.toml
-apps/*/wrangler.generated.toml
 
-# Astro internal cache (docs site)
-apps/*/.astro/
+# Astro's content/types cache (regenerated on every build)
+.astro/
 
 # Test artifacts
 coverage/
