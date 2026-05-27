@@ -133,6 +133,23 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
      scroll if anything inside still overflows. The Toast UI toolbar has
      its own overflow-x: auto so it scrolls independently. */
   html, body { overflow-x: hidden; max-width: 100vw; }
+
+  /* Mobile editor tweaks. At narrow viewports the topbar's horizontal
+   * scroll buries the Save button off the right edge, and Milkdown's
+   * default 60px×120px ProseMirror padding leaves almost no content
+   * width on a 412px screen. Wrap the topbar, make Save full-width
+   * + sticky to the bottom of the topbar row, and shrink the
+   * ProseMirror prose padding to something usable on phones. */
+  @media (max-width: 640px) {
+    .editor-topbar { flex-wrap: wrap; overflow-x: visible; }
+    .editor-topbar .spacer { display: none; }
+    .editor-topbar input.title { width: 100%; max-width: 100%; }
+    .editor-topbar #save-btn {
+      order: 99; flex: 1 1 100%; min-height: 40px;
+      font-size: var(--text-sm); font-weight: 700;
+    }
+    .milkdown .ProseMirror { padding: 24px 16px; }
+  }
 </style>
 </head><body>
 <div class="editor-topbar">

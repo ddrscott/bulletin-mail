@@ -376,6 +376,14 @@ function renderWikiShell(
   .wiki-footer { margin-top: var(--space-7); padding: var(--space-5) 0; border-top: var(--hairline); font: var(--text-xs)/1.5 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
   .wiki-footer a { color: var(--ink-muted); }
   .wiki-footer a:hover { color: var(--ink); background: transparent; }
+  /* Prominent Edit affordance for admins — sits next to 'Wiki' in the
+   * dateline row, NOT buried in the avatar dropdown. */
+  .dateline a.wiki-edit-link {
+    color: var(--ink); font-weight: 700;
+    border: 1px solid var(--ink); padding: 2px 10px; border-radius: 999px;
+    text-decoration: none;
+  }
+  .dateline a.wiki-edit-link:hover { background: var(--ink); color: var(--paper); }
 </style>
 </head><body>
 <div class="app-shell">
@@ -388,7 +396,7 @@ function renderWikiShell(
   </header>
   <div class="dateline dateline--row">
     <div class="dateline__nav">
-      <a href="/">Wiki</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}
+      <a href="/">Wiki</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}${admin ? `<span class="sep">·</span><a href="/wiki/${esc(slug)}/edit" class="wiki-edit-link">Edit</a>` : ""}
     </div>
   </div>
   <main class="wiki-main">${bodyHtml}</main>
