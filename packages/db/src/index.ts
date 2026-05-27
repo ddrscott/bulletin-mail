@@ -161,6 +161,13 @@ export async function createGroup(
 }
 
 export type UpdateGroupInput = {
+  /**
+   * The email local-part (e.g. 'announcements'). Mutable ONLY while the
+   * group has zero members AND zero messages — see countGroupActivity().
+   * Caller is responsible for enforcing that gate; this function just
+   * writes the column.
+   */
+  name?: string;
   displayName?: string;
   description?: string | null;
   postingPolicy?: "members" | "moderated" | "announce_only" | "open";
@@ -174,9 +181,11 @@ export type UpdateGroupInput = {
 /**
  * Patch a group's editable fields. Returns true if a row was affected.
  *
- * Intentionally does NOT allow changing `name` (local-part) or `tenant_id` —
- * both are referenced by existing message threads and member subscriptions.
- * Renaming a list is a "create + migrate" job, not an UPDATE.
+ * `name` (the email local-part) IS allowed but only when the caller has
+ * already verified the group has no members and no messages — every
+ * existing message thread references the old local-part in its From line,
+ * so changing it on a populated list breaks RFC 5322 threading. The route
+ * handler enforces the empty-state gate.
  */
 export async function updateGroup(
   db: D1Database,
@@ -185,6 +194,7 @@ export async function updateGroup(
 ): Promise<boolean> {
   const sets: string[] = [];
   const values: (string | number | null)[] = [];
+  if (patch.name !== undefined) { sets.push("name = ?"); values.push(patch.name); }
   if (patch.displayName !== undefined) { sets.push("display_name = ?"); values.push(patch.displayName); }
   if (patch.description !== undefined) { sets.push("description = ?"); values.push(patch.description); }
   if (patch.postingPolicy !== undefined) { sets.push("posting_policy = ?"); values.push(patch.postingPolicy); }
@@ -195,9 +205,61 @@ export async function updateGroup(
   if (patch.subscribeStatement !== undefined) { sets.push("subscribe_statement = ?"); values.push(patch.subscribeStatement); }
   if (sets.length === 0) return false;
   values.push(groupId);
+  try {
+    const result = await db
+      .prepare(`UPDATE groups SET ${sets.join(", ")} WHERE id = ?`)
+      .bind(...values)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  } catch (err) {
+    // UNIQUE(tenant_id, name) — surface name collisions as a typed result so
+    // the route handler can return 409.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/UNIQUE constraint failed/i.test(msg)) throw new GroupNameTakenError();
+    throw err;
+  }
+}
+
+export class GroupNameTakenError extends Error {
+  constructor() {
+    super("group name already in use for this tenant");
+    this.name = "GroupNameTakenError";
+  }
+}
+
+/**
+ * Count members + messages on a group. Used as the empty-state gate for
+ * rename and delete — only fully-empty groups can be renamed/deleted from
+ * the admin UI; anything with traffic requires a migrate-or-archive flow
+ * that doesn't exist yet.
+ */
+export async function countGroupActivity(
+  db: D1Database,
+  groupId: string,
+): Promise<{ members: number; messages: number }> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM members  WHERE group_id = ?) AS members,
+         (SELECT COUNT(*) FROM messages WHERE group_id = ?) AS messages`,
+    )
+    .bind(groupId, groupId)
+    .first<{ members: number; messages: number }>();
+  return { members: row?.members ?? 0, messages: row?.messages ?? 0 };
+}
+
+/**
+ * Hard-delete a group. ON DELETE CASCADE on the FK columns wipes members,
+ * messages, moderation_queue, and subscription_requests in the same
+ * statement. Caller must check countGroupActivity() first.
+ */
+export async function deleteGroup(
+  db: D1Database,
+  groupId: string,
+): Promise<boolean> {
   const result = await db
-    .prepare(`UPDATE groups SET ${sets.join(", ")} WHERE id = ?`)
-    .bind(...values)
+    .prepare("DELETE FROM groups WHERE id = ?")
+    .bind(groupId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }

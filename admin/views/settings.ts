@@ -140,10 +140,134 @@ export function renderSettingsTab(host: HTMLElement, group: GroupSummary, onSave
       root.appendChild(h("div", { class: `banner ${banner.kind === "ok" ? "banner--ok" : "banner--alert"}` }, banner.text));
     }
     root.appendChild(form);
+    root.appendChild(renderDangerZone(group, draw, () => { banner = null; }));
     mount(host, root);
   };
 
   draw();
+}
+
+/**
+ * Rename + delete controls. Both actions are gated server-side on
+ * `activeMemberCount + messageCount === 0`. We use the cached group's
+ * activeMemberCount + lastMessageAt to surface a disabled state up
+ * front, but the server is the authority — a 409 surfaces the actual
+ * member/message counts so the UI can explain the gate.
+ */
+function renderDangerZone(
+  group: GroupSummary,
+  redraw: () => void,
+  clearBanner: () => void,
+): HTMLElement {
+  const hasTraffic = group.activeMemberCount > 0 || group.lastMessageAt !== null;
+
+  if (hasTraffic) {
+    return h("section", { class: "panel panel--danger" },
+      h("h3", null, "Danger zone"),
+      h("p", { class: "hint" },
+        `This list has ${group.activeMemberCount} active member${group.activeMemberCount === 1 ? "" : "s"}${
+          group.lastMessageAt !== null ? " and has received messages" : ""
+        }. Rename and delete are disabled while the list has traffic — both actions would break threading on existing replies and orphan subscribers. A migrate-or-archive flow for populated lists isn't built yet.`,
+      ),
+    );
+  }
+
+  // Rename
+  const renameInput = h("input", { type: "text", value: group.name }) as HTMLInputElement;
+  const renameBtn = h("button", { class: "btn", type: "submit" }, "Rename list") as HTMLButtonElement;
+  const renameForm = h("form", {
+    onsubmit: async (ev: Event) => {
+      ev.preventDefault();
+      const newName = renameInput.value.trim().toLowerCase();
+      if (newName === group.name) return;
+      if (!confirm(`Rename '${group.name}' to '${newName}'? This changes the list's email address.`)) return;
+      renameBtn.disabled = true;
+      try {
+        await api.updateGroup(group.id, { name: newName });
+        group.name = newName;
+        clearBanner();
+        redraw();
+      } catch (err) {
+        const msg = err instanceof HttpError
+          ? (() => {
+              const p = err.payload as { error?: string; members?: number; messages?: number } | null;
+              if (p?.error === "name_taken") return "That name is already used by another list.";
+              if (p?.error === "invalid_name") return "Invalid list name. Use lowercase letters, numbers, and dashes.";
+              if (p?.error === "group_has_traffic") {
+                return `Can't rename — list has ${p.members ?? 0} member(s) and ${p.messages ?? 0} message(s).`;
+              }
+              return p?.error ?? err.message;
+            })()
+          : (err as Error).message;
+        alert(`Couldn't rename: ${msg}`);
+      } finally {
+        renameBtn.disabled = false;
+      }
+    },
+  },
+    h("h4", null, "Rename"),
+    h("p", { class: "hint" }, "Changes the email local-part. Only available while the list is empty."),
+    h("div", { class: "field-group" },
+      h("label", null, "New list name"),
+      renameInput,
+    ),
+    renameBtn,
+  );
+
+  // Delete with type-to-confirm
+  const confirmInput = h("input", {
+    type: "text",
+    placeholder: `Type "${group.name}" to confirm`,
+    autocomplete: "off",
+  }) as HTMLInputElement;
+  const deleteBtn = h("button", {
+    class: "btn btn--alert",
+    type: "submit",
+    disabled: "disabled",
+  }, "Delete this list") as HTMLButtonElement;
+  confirmInput.addEventListener("input", () => {
+    deleteBtn.disabled = confirmInput.value.trim() !== group.name;
+  });
+  const deleteForm = h("form", {
+    onsubmit: async (ev: Event) => {
+      ev.preventDefault();
+      if (confirmInput.value.trim() !== group.name) return;
+      deleteBtn.disabled = true;
+      try {
+        await api.deleteGroup(group.id);
+        // Send the user back to the home page — the group they were on
+        // no longer exists.
+        location.hash = "#/";
+      } catch (err) {
+        const msg = err instanceof HttpError
+          ? (() => {
+              const p = err.payload as { error?: string; members?: number; messages?: number } | null;
+              if (p?.error === "group_has_traffic") {
+                return `Can't delete — list has ${p.members ?? 0} member(s) and ${p.messages ?? 0} message(s). The page is showing stale activity counts; refresh and try again, or migrate subscribers first.`;
+              }
+              return p?.error ?? err.message;
+            })()
+          : (err as Error).message;
+        alert(`Couldn't delete: ${msg}`);
+        deleteBtn.disabled = false;
+      }
+    },
+  },
+    h("h4", null, "Delete"),
+    h("p", { class: "hint" }, "Permanently removes the list and any pending subscription requests. Cannot be undone."),
+    h("div", { class: "field-group" },
+      h("label", null, `Type the list name (${group.name}) to confirm`),
+      confirmInput,
+    ),
+    deleteBtn,
+  );
+
+  return h("section", { class: "panel panel--danger" },
+    h("h3", null, "Danger zone"),
+    renameForm,
+    h("hr"),
+    deleteForm,
+  );
 }
 
 function policyOptions(current: PostingPolicy) {

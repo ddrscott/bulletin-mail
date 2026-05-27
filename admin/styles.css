@@ -302,6 +302,18 @@ main {
 .panel + .panel { margin-top: var(--space-4); }
 .panel h3 { margin: 0 0 var(--space-3); }
 
+/* Danger-zone panel — destructive actions (rename, delete). Red border
+ * + tinted header signal the destructive context without being shouty. */
+.panel--danger { border-color: var(--alert); border-top-width: 2px; }
+.panel--danger h3 {
+  color: var(--alert); text-transform: uppercase;
+  letter-spacing: 0.08em; font-size: var(--text-xs);
+  font-weight: 700; margin-bottom: var(--space-4);
+}
+.panel--danger h4 { margin: 0 0 var(--space-2); font-size: var(--text-base); }
+.panel--danger form + hr { margin: var(--space-5) 0; border: 0; border-top: var(--hairline); }
+.panel--danger button { margin-top: var(--space-3); }
+
 /* Form group inside a panel: label/input pairs with consistent spacing */
 .field-group { display: flex; flex-direction: column; gap: var(--space-1); }
 .field-group + .field-group { margin-top: var(--space-4); }

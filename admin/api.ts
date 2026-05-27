@@ -91,6 +91,8 @@ export type CreateGroupInput = {
 };
 
 export type UpdateGroupInput = Partial<{
+  /** Email local-part. Only mutable on empty groups (no members, no messages). */
+  name: string;
   displayName: string;
   description: string | null;
   postingPolicy: PostingPolicy;
@@ -159,6 +161,9 @@ export const api = {
   },
   updateGroup(groupId: string, patch: UpdateGroupInput): Promise<unknown> {
     return request("PATCH", `/api/groups/${groupId}`, patch);
+  },
+  deleteGroup(groupId: string): Promise<unknown> {
+    return request("DELETE", `/api/groups/${groupId}`);
   },
   listMembers(groupId: string): Promise<{ members: Member[] }> {
     return request("GET", `/api/groups/${groupId}/members`) as Promise<{ members: Member[] }>;

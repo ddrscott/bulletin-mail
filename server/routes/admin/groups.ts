@@ -5,8 +5,11 @@
 
 import type { Hono } from "hono";
 import {
+  countGroupActivity,
   createGroup,
+  deleteGroup,
   getGroupById,
+  GroupNameTakenError,
   listGroupsByTenant,
   updateGroup,
   type ArchiveVisibility,
@@ -114,6 +117,7 @@ export function mountGroups(app: Hono<{ Bindings: Env; Variables: AppVariables }
     }
 
     const body = await safeJson<{
+      name?: string;
       displayName?: string;
       description?: string | null;
       postingPolicy?: string;
@@ -126,6 +130,26 @@ export function mountGroups(app: Hono<{ Bindings: Env; Variables: AppVariables }
     if (!body) return c.json({ error: "empty_body" }, 400);
 
     const patch: Parameters<typeof updateGroup>[2] = {};
+    // `name` (the email local-part) is mutable only on a fresh group with
+    // no members and no messages — message threads reference the old
+    // local-part in their From headers, so renaming a populated list breaks
+    // RFC 5322 threading. Gate here in the route so the DB layer stays
+    // schema-only.
+    if (body.name !== undefined) {
+      const n = body.name.trim().toLowerCase();
+      if (!GROUP_NAME_RE.test(n)) return c.json({ error: "invalid_name" }, 400);
+      if (n !== group.name) {
+        const activity = await countGroupActivity(c.env.DB, groupId);
+        if (activity.members > 0 || activity.messages > 0) {
+          return c.json({
+            error: "group_has_traffic",
+            members: activity.members,
+            messages: activity.messages,
+          }, 409);
+        }
+        patch.name = n;
+      }
+    }
     if (body.displayName !== undefined) {
       const dn = body.displayName.trim();
       if (!dn) return c.json({ error: "empty_display_name" }, 400);
@@ -168,8 +192,39 @@ export function mountGroups(app: Hono<{ Bindings: Env; Variables: AppVariables }
         : body.subscribeStatement.trim() || null;
     }
 
-    const ok = await updateGroup(c.env.DB, groupId, patch);
-    if (!ok) return c.body(null, 204); // no fields changed → still success-ish
+    try {
+      await updateGroup(c.env.DB, groupId, patch);
+    } catch (err) {
+      if (err instanceof GroupNameTakenError) {
+        return c.json({ error: "name_taken" }, 409);
+      }
+      throw err;
+    }
+    return c.body(null, 204);
+  });
+
+  // DELETE /api/groups/:id — only for empty groups (no members, no messages).
+  // Cascades via ON DELETE CASCADE to wipe subscription_requests and
+  // moderation_queue rows automatically. Populated lists need an archive /
+  // transfer flow that doesn't exist yet — return 409 with the counts so
+  // the UI can explain why the button is disabled.
+  app.delete("/api/groups/:id", requireTenantAdmin, async (c) => {
+    const admin = c.var.admin!;
+    const groupId = c.req.param("id");
+    const group = await getGroupById(c.env.DB, groupId);
+    if (!group || group.tenant_id !== admin.tenant_id) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const activity = await countGroupActivity(c.env.DB, groupId);
+    if (activity.members > 0 || activity.messages > 0) {
+      return c.json({
+        error: "group_has_traffic",
+        members: activity.members,
+        messages: activity.messages,
+      }, 409);
+    }
+    const ok = await deleteGroup(c.env.DB, groupId);
+    if (!ok) return c.json({ error: "not_found" }, 404);
     return c.body(null, 204);
   });
 }
