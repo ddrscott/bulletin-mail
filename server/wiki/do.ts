@@ -36,7 +36,7 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { computeLineDelta } from "./summary.js";
+import { computeLineDelta, computeUnifiedDiff } from "./summary.js";
 
 export type PageVisibility = "public" | "private";
 
@@ -73,6 +73,14 @@ export type VersionRow = {
    */
   added_lines: number | null;
   removed_lines: number | null;
+  /**
+   * Unified diff (3 lines context) between this version's md_source and
+   * the previous version's. Same string that's sent to the AI summarizer.
+   * NULL for the first version on a page (there's nothing to diff against)
+   * and for rows older than this feature. Rendered in the activity feed
+   * inside a <details> expander so reviewers can see the actual change.
+   */
+  diff_unified: string | null;
 };
 
 /**
@@ -89,6 +97,7 @@ export type ActivityRow = {
   summary: string | null;
   added_lines: number | null;
   removed_lines: number | null;
+  diff_unified: string | null;
   created_at: number;
 };
 
@@ -119,6 +128,7 @@ const SCHEMA_SQL = [
      summary             TEXT,
      added_lines         INTEGER,
      removed_lines       INTEGER,
+     diff_unified        TEXT,
      created_at          INTEGER NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_versions_page_created
@@ -151,6 +161,11 @@ const COLUMN_MIGRATIONS: Array<{ table: string; column: string; ddl: string }> =
     table: "versions",
     column: "removed_lines",
     ddl: "ALTER TABLE versions ADD COLUMN removed_lines INTEGER",
+  },
+  {
+    table: "versions",
+    column: "diff_unified",
+    ddl: "ALTER TABLE versions ADD COLUMN diff_unified TEXT",
   },
 ];
 
@@ -299,6 +314,7 @@ export class TenantWikiDO extends DurableObject {
                 v.summary AS summary,
                 v.added_lines AS added_lines,
                 v.removed_lines AS removed_lines,
+                v.diff_unified AS diff_unified,
                 v.created_at AS created_at
          FROM versions v
          JOIN pages p ON p.id = v.page_id
@@ -355,11 +371,13 @@ export class TenantWikiDO extends DurableObject {
         .toArray()[0];
       previousMdSource = prevVer?.md_source ?? null;
       const delta = computeLineDelta(previousMdSource ?? "", input.mdSource);
+      const diff = computeUnifiedDiff(previousMdSource ?? "", input.mdSource);
       db.exec(
-        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, diff_unified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         versionRow.id, pageId, versionRow.md_source, versionRow.html_compiled,
         versionRow.author_admin_id, versionRow.note,
         delta.added, delta.removed,
+        diff || null,
         versionRow.created_at,
       );
       db.exec(
@@ -368,13 +386,15 @@ export class TenantWikiDO extends DurableObject {
       );
     } else {
       pageId = ulid();
-      // First version on a new page → everything is "added".
+      // First version on a new page → everything is "added", and there's no
+      // previous to diff against so diff_unified stays NULL.
       const delta = computeLineDelta("", input.mdSource);
       db.exec(
-        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, diff_unified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         versionRow.id, pageId, versionRow.md_source, versionRow.html_compiled,
         versionRow.author_admin_id, versionRow.note,
         delta.added, delta.removed,
+        null,
         versionRow.created_at,
       );
       db.exec(
@@ -442,11 +462,13 @@ export class TenantWikiDO extends DurableObject {
     const newVersionId = ulid();
     const now = Date.now();
     const delta = computeLineDelta(currentMd, oldVer.md_source);
+    const diff = computeUnifiedDiff(currentMd, oldVer.md_source);
     db.exec(
-      "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO versions (id, page_id, md_source, html_compiled, author_admin_id, note, added_lines, removed_lines, diff_unified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       newVersionId, input.pageId, oldVer.md_source, oldVer.html_compiled,
       input.authorAdminId, `revert to ${oldVer.id.slice(0, 8)}`,
       delta.added, delta.removed,
+      diff || null,
       now,
     );
     db.exec(

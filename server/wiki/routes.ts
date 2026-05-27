@@ -626,6 +626,25 @@ function renderActivityPage({ tenant, productName, admin, rows, authorById }: Ac
   .activity-row__delta .delta { font-weight: 700; padding: 0 2px; }
   .activity-row__delta .delta--add { color: var(--ok, #166534); }
   .activity-row__delta .delta--del { color: var(--alert, #b91c1c); margin-left: 4px; }
+  .activity-row__diff { margin-top: var(--space-2); }
+  .activity-row__diff summary {
+    cursor: pointer; font: 600 var(--text-xs) var(--font-mono);
+    color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em;
+    list-style: none;
+  }
+  .activity-row__diff summary::-webkit-details-marker { display: none; }
+  .activity-row__diff summary:hover { color: var(--ink); }
+  .activity-row__diff[open] summary { color: var(--ink); margin-bottom: var(--space-2); }
+  .activity-row__diff pre {
+    margin: 0; padding: var(--space-3) var(--space-4);
+    background: var(--paper-2); border: var(--hairline); border-radius: 4px;
+    overflow: auto; font: 12px/1.5 var(--font-mono); color: var(--ink);
+    white-space: pre; max-height: 28rem;
+  }
+  .activity-row__diff pre .diff-add { color: #0a6b34; background: #e6f6ea; display: block; }
+  .activity-row__diff pre .diff-del { color: #962020; background: #fbe8e8; display: block; }
+  .activity-row__diff pre .diff-hunk { color: var(--ink-muted); display: block; }
+  .activity-row__diff pre .diff-ctx { color: var(--ink); display: block; }
   .activity-empty { padding: var(--space-5) 0; }
 </style>
 </head><body>
@@ -669,13 +688,42 @@ function renderActivityRow(
   const deltaHtml = r.added_lines === null || r.removed_lines === null
     ? `<span class="activity-row__delta muted">—</span>`
     : `<span class="activity-row__delta"><span class="delta delta--add">+${r.added_lines}</span><span class="delta delta--del">-${r.removed_lines}</span></span>`;
+  // Diff expander — collapsed by default, native <details> so no JS. Lines
+  // are colored by their leading +/-/@ marker for readability. NULL on the
+  // first-version-of-a-page and on rows older than this feature.
+  const diffHtml = r.diff_unified
+    ? `<details class="activity-row__diff"><summary>Show diff</summary><pre>${renderDiffLines(r.diff_unified, esc)}</pre></details>`
+    : "";
   return `<li class="activity-row">
     <h2 class="activity-row__title"><a href="/wiki/${esc(r.page_slug)}">${esc(r.page_title)}</a> <span class="muted" style="font-weight:400">· /${esc(r.page_slug)}</span></h2>
     ${summaryHtml}
     <p class="activity-row__meta">
       ${deltaHtml}<span class="sep">·</span>${esc(author)}<span class="sep">·</span>${esc(when)}<span class="sep">·</span>v${esc(r.version_id.slice(0, 8))}
     </p>
+    ${diffHtml}
   </li>`;
+}
+
+/**
+ * Render a unified diff string as colored HTML — one `<span class="diff-…">`
+ * per line so CSS can paint adds green / removes red / hunk headers muted.
+ * Strips the `--- previous` / `+++ current` filename lines (they're noise in
+ * a single-diff view; the hunk header `@@ … @@` is enough).
+ */
+function renderDiffLines(diff: string, esc: (s: string) => string): string {
+  const lines = diff.replace(/\r\n/g, "\n").split("\n");
+  const out: string[] = [];
+  for (const raw of lines) {
+    if (raw === "") continue;
+    if (raw.startsWith("--- ") || raw.startsWith("+++ ")) continue; // strip filename rows
+    let cls: string;
+    if (raw.startsWith("@@")) cls = "diff-hunk";
+    else if (raw.startsWith("+")) cls = "diff-add";
+    else if (raw.startsWith("-")) cls = "diff-del";
+    else cls = "diff-ctx";
+    out.push(`<span class="${cls}">${esc(raw)}</span>`);
+  }
+  return out.join("\n");
 }
 
 /** Coarse human-readable relative time. Avoids a date-fns dep on the Worker. */
