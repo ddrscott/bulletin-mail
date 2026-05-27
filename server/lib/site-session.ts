@@ -48,11 +48,11 @@ export async function verifySiteSessionCookie(
 
 export function buildSiteSetCookie(value: string): string {
   const maxAge = Math.floor(SESSION_LIFETIME_MS / 1000);
-  return `${SITE_COOKIE_NAME}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=${maxAge}`;
+  return `${SITE_COOKIE_NAME}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 export function buildSiteClearCookie(): string {
-  return `${SITE_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=0`;
+  return `${SITE_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
 export function readSiteCookieFromHeader(cookieHeader: string | null | undefined): string | null {

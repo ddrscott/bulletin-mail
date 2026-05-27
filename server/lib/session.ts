@@ -11,8 +11,10 @@
  *
  * Cookie attributes (set in routes/admin/auth.ts):
  *   - HttpOnly, Secure, SameSite=Lax (per PRD §11 Phase 2)
- *   - Path=/admin (admin lives at <apex>/admin post-consolidation;
- *     scoping Path keeps the cookie off marketing/docs requests)
+ *   - Path=/ — broadly scoped because the admin SPA at /admin/* calls APIs
+ *     at /api/* and /auth/* (no /admin prefix). HttpOnly+Secure+SameSite=Lax
+ *     means the cookie can't be exfiltrated by docs/marketing JS even if it
+ *     leaks onto those requests.
  *   - Max-Age=7d to match payload `exp`
  */
 
@@ -67,15 +69,16 @@ export async function verifySessionCookie(
   return payload;
 }
 
-/** Build the Set-Cookie header value. Path=/admin scopes the cookie to the
- * admin SPA only — apex marketing/docs requests don't get the auth cookie. */
+/** Build the Set-Cookie header value. Path=/ so the cookie is sent on
+ * /api/* (where the SPA's data APIs live) and /auth/* (verify endpoint),
+ * not just /admin/*. */
 export function buildSessionSetCookie(value: string): string {
   const maxAge = Math.floor(SESSION_LIFETIME_MS / 1000);
-  return `${SESSION_COOKIE_NAME}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=${maxAge}`;
+  return `${SESSION_COOKIE_NAME}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 export function buildSessionClearCookie(): string {
-  return `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/admin; Max-Age=0`;
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 }
 
 export function readSessionCookieFromHeader(cookieHeader: string | null | undefined): string | null {
