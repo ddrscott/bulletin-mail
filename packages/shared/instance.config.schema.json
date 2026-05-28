@@ -35,6 +35,11 @@
       "default": "unsubscribe+",
       "description": "Local-part prefix for one-click unsubscribe tokens, e.g. 'unsubscribe+'."
     },
+    "mailSubdomain": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "Optional DNS label to host outbound + inbound mail on. When set, system addresses (noreply, support, abuse, dmarc) and the unsubscribe mailto live at <mailSubdomain>.<apex> instead of <apex>. In single-tenant deployments this is the recommended pattern (default 'mail') — the apex serves the wiki/admin web UI, and mail lives on its own subdomain with its own SPF/DKIM/DMARC. The lone tenant's slug equals mailSubdomain in single-tenant mode, so list addresses become <group>@<mailSubdomain>.<apex>. In multi-tenant mode this only affects system addresses; list addresses still use <group>@<tenant>.<apex>."
+    },
 
     "archiveUrlTemplate": {
       "type": "string",

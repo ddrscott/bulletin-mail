@@ -12,6 +12,8 @@
   "noreplyAddress": "noreply",
   "unsubscribeAddressPrefix": "unsubscribe+",
 
+  "mailSubdomain": null,
+
   "archiveUrlTemplate": "https://example.org/g/{tenant}/{group}",
   "unsubscribeUrlTemplate": "https://example.org/u/{token}",
 

@@ -16,6 +16,7 @@
 
 import {
   loadFromEnv,
+  mailHost,
   type InstanceConfig,
 } from "@bulletinmail/shared";
 import {
@@ -221,8 +222,8 @@ export default {
  * If `recipient` matches the configured unsubscribe-mailto pattern, return
  * the token. Else null.
  *
- * Pattern: `<prefix><token>@<apex>` where prefix is e.g. `unsubscribe+`.
- * Subdomain hosts do NOT match — the unsub mailto only lives at the apex.
+ * Pattern: `<prefix><token>@<mailHost>` where `<mailHost>` is the apex (default)
+ * or `<mailSubdomain>.<apex>` when the operator has separated web/mail surfaces.
  */
 function extractUnsubToken(recipient: string, config: InstanceConfig): string | null {
   const lower = recipient.toLowerCase();
@@ -230,7 +231,7 @@ function extractUnsubToken(recipient: string, config: InstanceConfig): string | 
   if (at < 0) return null;
   const local = lower.slice(0, at);
   const domain = lower.slice(at + 1);
-  if (domain !== config.apexDomain.toLowerCase()) return null;
+  if (domain !== mailHost(config).toLowerCase()) return null;
   const prefix = config.unsubscribeAddressPrefix.toLowerCase();
   if (!local.startsWith(prefix)) return null;
   const token = local.slice(prefix.length);

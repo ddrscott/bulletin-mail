@@ -25,12 +25,26 @@ export type InstanceConfig = {
   productNameShort: string;
   tagline: string;
 
-  // System addresses (local-parts; combined with apexDomain at runtime)
+  // System addresses (local-parts; combined with the mail host at runtime —
+  // see mailHost() below, which respects mailSubdomain.)
   supportAddress: string;
   abuseAddress: string;
   dmarcAddress: string;
   noreplyAddress: string;
   unsubscribeAddressPrefix: string;
+
+  /**
+   * Optional DNS label that hosts mail (outbound From / inbound recipient
+   * domain). When set, system addresses live at `<localPart>@<mailSubdomain>.<apex>`
+   * instead of `<localPart>@<apex>`. The single-tenant deploy variant uses
+   * this to keep mail on its own subdomain (default "mail") with its own
+   * SPF/DKIM/DMARC surface, separate from the apex's web traffic. In single-
+   * tenant mode the lone tenant's slug ALSO equals this value, so list
+   * addresses become `<group>@<mailSubdomain>.<apex>`. In multi-tenant mode
+   * this only affects system addresses; list addresses still use
+   * `<group>@<tenant>.<apex>`.
+   */
+  mailSubdomain: string | null;
 
   // URL templates: {tenant}, {group}, {token}, {apex} are substituted.
   archiveUrlTemplate: string;
@@ -61,19 +75,52 @@ export type InstanceConfig = {
      * Single-tenant deployment mode. When true, the apex domain IS the
      * tenant — the wiki, /admin/, /join/, /auth/ serve from the apex root
      * with no tenant subdomain. The single tenant is identified by the
-     * fixed slug SINGLE_TENANT_SLUG ("main"). First signup creates the
-     * tenant + admin atomically. Marketing landing + Astro docs build
-     * are skipped. Reference deployment leaves this false; per-client
-     * single-org deploys flip it on in their overlay.
+     * configured `mailSubdomain` (default "mail") so the slug doubles as the
+     * DNS label for inbound + outbound mail. First signup creates the tenant
+     * + admin atomically. Marketing landing + Astro docs build are skipped.
+     * Reference deployment leaves this false; per-client single-org deploys
+     * flip it on in their overlay.
      */
     singleTenant: boolean;
   };
 };
 
-/** Tenant slug used in single-tenant deployments. The host classifier
- * remaps `<apex>` → { kind: "tenant", slug: SINGLE_TENANT_SLUG } when
- * features.singleTenant is true. */
-export const SINGLE_TENANT_SLUG = "main";
+/**
+ * Default mail subdomain used in single-tenant deployments. The lone
+ * tenant's slug equals this value (or whatever the operator overrides
+ * via `mailSubdomain`), so all of: classifier remap on the apex, MIME
+ * From addresses, inbound recipient resolution — all converge on the
+ * same string.
+ */
+export const DEFAULT_SINGLE_TENANT_MAIL_SUBDOMAIN = "mail";
+
+/**
+ * Resolve the tenant slug used by the single-tenant deploy variant. Equals
+ * config.mailSubdomain when set (so the slug doubles as the DNS label),
+ * otherwise the default `"mail"`. Returns null in multi-tenant mode — the
+ * concept doesn't apply.
+ */
+export function singleTenantSlug(config: {
+  features: { singleTenant: boolean };
+  mailSubdomain?: string | null;
+}): string | null {
+  if (!config.features.singleTenant) return null;
+  return config.mailSubdomain ?? DEFAULT_SINGLE_TENANT_MAIL_SUBDOMAIN;
+}
+
+/**
+ * The host used for outbound From / inbound recipient on system mail
+ * (noreply, support, abuse, dmarc, unsubscribe mailtos). Returns
+ * `<mailSubdomain>.<apex>` when set; the apex itself otherwise.
+ */
+export function mailHost(config: {
+  apexDomain: string;
+  mailSubdomain?: string | null;
+}): string {
+  return config.mailSubdomain
+    ? `${config.mailSubdomain}.${config.apexDomain}`
+    : config.apexDomain;
+}
 
 /**
  * Defaults applied when an operator omits an optional field. Required fields
@@ -159,6 +206,11 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
       defaults.unsubscribeAddressPrefix,
     ),
 
+    mailSubdomain: (() => {
+      const v = env["INSTANCE_MAIL_SUBDOMAIN"];
+      return typeof v === "string" && v.length > 0 ? v : null;
+    })(),
+
     archiveUrlTemplate: required("INSTANCE_ARCHIVE_URL"),
     unsubscribeUrlTemplate: required("INSTANCE_UNSUB_URL"),
 
@@ -227,7 +279,7 @@ export function unsubscribeUrl(config: InstanceConfig, token: string): string {
 }
 
 export function unsubscribeMailto(config: InstanceConfig, token: string): string {
-  return `${config.unsubscribeAddressPrefix}${token}@${config.apexDomain}`;
+  return `${config.unsubscribeAddressPrefix}${token}@${mailHost(config)}`;
 }
 
 export type SystemAddressKind = "support" | "abuse" | "dmarc" | "noreply";
@@ -239,7 +291,7 @@ export function systemAddress(config: InstanceConfig, kind: SystemAddressKind): 
     dmarc: config.dmarcAddress,
     noreply: config.noreplyAddress,
   }[kind];
-  return `${localPart}@${config.apexDomain}`;
+  return `${localPart}@${mailHost(config)}`;
 }
 
 function interpolate(template: string, vars: Record<string, string>): string {

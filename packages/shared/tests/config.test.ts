@@ -3,6 +3,8 @@ import {
   archiveUrl,
   ConfigError,
   loadFromEnv,
+  mailHost,
+  singleTenantSlug,
   systemAddress,
   unsubscribeMailto,
   unsubscribeUrl,
@@ -68,5 +70,48 @@ describe("url helpers", () => {
     expect(systemAddress(cfg, "abuse")).toBe("abuse@example.org");
     expect(systemAddress(cfg, "dmarc")).toBe("dmarc@example.org");
     expect(systemAddress(cfg, "noreply")).toBe("noreply@example.org");
+  });
+});
+
+describe("mailSubdomain", () => {
+  it("defaults to null when unset, with mailHost == apex", () => {
+    const cfg = loadFromEnv(fullEnv);
+    expect(cfg.mailSubdomain).toBe(null);
+    expect(mailHost(cfg)).toBe("example.org");
+  });
+
+  it("loads from INSTANCE_MAIL_SUBDOMAIN and routes system mail through it", () => {
+    const cfg = loadFromEnv({ ...fullEnv, INSTANCE_MAIL_SUBDOMAIN: "mail" });
+    expect(cfg.mailSubdomain).toBe("mail");
+    expect(mailHost(cfg)).toBe("mail.example.org");
+    expect(systemAddress(cfg, "noreply")).toBe("noreply@mail.example.org");
+    expect(unsubscribeMailto(cfg, "tok")).toBe("unsubscribe+tok@mail.example.org");
+  });
+
+  it("treats empty string the same as unset (null)", () => {
+    const cfg = loadFromEnv({ ...fullEnv, INSTANCE_MAIL_SUBDOMAIN: "" });
+    expect(cfg.mailSubdomain).toBe(null);
+    expect(mailHost(cfg)).toBe("example.org");
+  });
+});
+
+describe("singleTenantSlug", () => {
+  it("returns null in multi-tenant mode", () => {
+    const cfg = loadFromEnv(fullEnv);
+    expect(singleTenantSlug(cfg)).toBe(null);
+  });
+
+  it("defaults to 'mail' in single-tenant mode", () => {
+    const cfg = loadFromEnv({ ...fullEnv, INSTANCE_FEATURE_SINGLE_TENANT: "true" });
+    expect(singleTenantSlug(cfg)).toBe("mail");
+  });
+
+  it("respects the configured mailSubdomain in single-tenant mode", () => {
+    const cfg = loadFromEnv({
+      ...fullEnv,
+      INSTANCE_FEATURE_SINGLE_TENANT: "true",
+      INSTANCE_MAIL_SUBDOMAIN: "lists",
+    });
+    expect(singleTenantSlug(cfg)).toBe("lists");
   });
 });

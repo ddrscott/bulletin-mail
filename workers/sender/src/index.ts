@@ -152,9 +152,14 @@ async function processSendJob(env: Env, config: InstanceConfig, job: SendJob): P
     referencesChain,
   });
 
-  // Domains we DKIM-sign for. For a BYO-domain tenant, accept their domain
-  // too (V4 unblocked); otherwise the apex is the only valid signer.
+  // Domains we DKIM-sign for. The apex always counts. When mailSubdomain is
+  // set, mail also flows through <mailSubdomain>.<apex> (single-tenant
+  // deploys + any multi-tenant deploy that separated web/mail surfaces).
+  // For a BYO-domain tenant, accept their domain too (V4 unblocked).
   const allowedSigningDomains = [config.apexDomain];
+  if (config.mailSubdomain) {
+    allowedSigningDomains.push(`${config.mailSubdomain}.${config.apexDomain}`);
+  }
   if (tenant.byo_domain) allowedSigningDomains.push(tenant.byo_domain);
 
   try {

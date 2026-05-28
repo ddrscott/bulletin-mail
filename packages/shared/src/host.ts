@@ -13,15 +13,16 @@
  *   "x.y.example.org"            → { kind: "unknown" } (multi-level subdomain)
  *   "evil.com"                   → { kind: "unknown" } (wrong apex)
  *
- * Single-tenant mode (config.singleTenant = true):
+ * Single-tenant mode (config.features.singleTenant = true):
  *
- *   "example.org"                → { kind: "tenant", slug: "main" }
+ *   "example.org"                → { kind: "tenant", slug: <singleTenantSlug> }
  *
  * The single-tenant flag remaps the apex itself into the tenant namespace
  * so every existing wiki / admin / /join / /auth route fires at the apex
- * unchanged. The fixed slug "main" is exported as SINGLE_TENANT_SLUG from
- * config.ts. The marketing landing page is gated off by the mount layer
- * (see server/index.ts), not here.
+ * unchanged. The slug equals `config.mailSubdomain` (default "mail") — the
+ * same value used to build mail addresses, so the slug doubles as the DNS
+ * label for inbound + outbound mail. The marketing landing page is gated
+ * off by the mount layer (see server/index.ts), not here.
  *
  * Returns "unknown" — not null — so callers must explicitly handle the case.
  */
@@ -39,16 +40,21 @@ export type HostConfig = {
    * can pass either form without an extra wrapper. */
   singleTenant?: boolean;
   features?: { singleTenant?: boolean };
+  /** Drives the single-tenant slug: in single-tenant mode the apex remaps to
+   * `{ kind: "tenant", slug: mailSubdomain ?? "mail" }`. Equals the DNS
+   * label that hosts mail, so slug + mail host stay in sync. Ignored in
+   * multi-tenant mode. */
+  mailSubdomain?: string | null;
 };
 
-/** Tenant slug used in single-tenant deployments. Kept here (not imported
- * from config.ts) so host.ts has no dependency cycle and stays a pure
- * string-classifier. config.ts re-exports the same constant under the
- * same name for app code to import. */
-const SINGLE_TENANT_SLUG = "main";
+const DEFAULT_SINGLE_TENANT_SLUG = "mail";
 
 function isSingleTenant(config: HostConfig): boolean {
   return Boolean(config.singleTenant ?? config.features?.singleTenant);
+}
+
+function singleTenantSlug(config: HostConfig): string {
+  return config.mailSubdomain ?? DEFAULT_SINGLE_TENANT_SLUG;
 }
 
 export function classifyHost(host: string, config: HostConfig): HostKind {
@@ -57,7 +63,7 @@ export function classifyHost(host: string, config: HostConfig): HostKind {
 
   if (hostname === config.apexDomain) {
     return isSingleTenant(config)
-      ? { kind: "tenant", slug: SINGLE_TENANT_SLUG }
+      ? { kind: "tenant", slug: singleTenantSlug(config) }
       : { kind: "apex" };
   }
 

@@ -35,7 +35,7 @@ import {
 import {
   classifyHost,
   fetchGravatarDisplayName,
-  SINGLE_TENANT_SLUG,
+  singleTenantSlug,
   systemAddress,
   type InstanceConfig,
 } from "@bulletinmail/shared";
@@ -69,7 +69,8 @@ export function mountAuth(app: Hono<{ Bindings: Env; Variables: AppVariables }>)
       // Single-tenant mode: on first visit the 'main' tenant doesn't exist
       // yet. Treat that as "signup is open" so the bootstrap path can run.
       if (!tenant) {
-        if (c.var.config.features.singleTenant && currentTenantSlug(c) === SINGLE_TENANT_SLUG) {
+        const bootstrapSlug = singleTenantSlug(c.var.config);
+        if (bootstrapSlug && currentTenantSlug(c) === bootstrapSlug) {
           return c.json({ available: true });
         }
         return c.text("Not found", 404);
@@ -201,22 +202,21 @@ async function sendSiteMagicLink(
 async function tenantSignup(c: Ctx): Promise<Response> {
   const tenant = await currentTenant(c);
 
-  // Single-tenant bootstrap: tenant 'main' doesn't exist yet, AND the slug
-  // we'd look up matches the well-known single-tenant slug. Create the
-  // tenant + first admin atomically. Subsequent signups fall into the
-  // normal "signup_closed" path because countAdminsByTenant > 0.
+  // Single-tenant bootstrap: lone tenant doesn't exist yet, AND the slug we'd
+  // look up matches the configured single-tenant slug (the same string used
+  // as the mail subdomain). Create the tenant + first admin atomically.
+  // Subsequent signups fall into the normal "signup_closed" path because
+  // countAdminsByTenant > 0.
   if (!tenant) {
-    if (
-      c.var.config.features.singleTenant &&
-      currentTenantSlug(c) === SINGLE_TENANT_SLUG
-    ) {
+    const bootstrapSlug = singleTenantSlug(c.var.config);
+    if (bootstrapSlug && currentTenantSlug(c) === bootstrapSlug) {
       const body = await safeJson<{ email?: string }>(c.req.raw);
       const email = body?.email?.trim().toLowerCase();
       if (!email || !validEmail(email)) return c.json({ error: "invalid_email" }, 400);
 
       const displayName = await fetchGravatarDisplayName(email);
       const { adminId } = await createTenantWithFirstAdmin(c.env.DB, {
-        slug: SINGLE_TENANT_SLUG,
+        slug: bootstrapSlug,
         displayName: c.var.config.productName,
         adminEmail: email,
         adminDisplayName: displayName,
@@ -251,7 +251,8 @@ async function tenantRequest(c: Ctx): Promise<Response> {
     // to match the existing "don't leak which emails are registered"
     // behavior below. The SPA should be calling /signup, not /request,
     // at this point — but a request that arrives here just no-ops.
-    if (c.var.config.features.singleTenant && currentTenantSlug(c) === SINGLE_TENANT_SLUG) {
+    const bootstrapSlug = singleTenantSlug(c.var.config);
+    if (bootstrapSlug && currentTenantSlug(c) === bootstrapSlug) {
       return c.body(null, 204);
     }
     return c.text("Not found", 404);

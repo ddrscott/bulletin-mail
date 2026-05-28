@@ -63,18 +63,23 @@ describe("extractTenantSlug", () => {
 describe("classifyHost — single-tenant mode", () => {
   const cfg = { apexDomain: "example.org", singleTenant: true };
 
-  it("treats the apex as tenant 'main'", () => {
-    expect(classifyHost("example.org", cfg)).toEqual({ kind: "tenant", slug: "main" });
+  it("treats the apex as tenant 'mail' (default slug equals default mailSubdomain)", () => {
+    expect(classifyHost("example.org", cfg)).toEqual({ kind: "tenant", slug: "mail" });
   });
 
-  it("strips the port and still maps to 'main'", () => {
-    expect(classifyHost("example.org:8787", cfg)).toEqual({ kind: "tenant", slug: "main" });
+  it("strips the port and still maps to the default slug", () => {
+    expect(classifyHost("example.org:8787", cfg)).toEqual({ kind: "tenant", slug: "mail" });
   });
 
-  it("rejects subdomains (single-tenant doesn't use them)", () => {
-    // The subdomain is still a tenant slug per the classifier, but since the
-    // single-tenant deployment will only have a 'main' tenant row, lookups
-    // will 404 — the classifier itself doesn't reject the shape.
+  it("uses the configured mailSubdomain as the slug", () => {
+    const customCfg = { apexDomain: "example.org", singleTenant: true, mailSubdomain: "lists" };
+    expect(classifyHost("example.org", customCfg)).toEqual({ kind: "tenant", slug: "lists" });
+  });
+
+  it("classifier doesn't reject literal-subdomain shape (handler 404s instead)", () => {
+    // Multi-tenant rules still apply at the classifier — the subdomain is a
+    // tenant slug. In single-tenant deployments only one tenant row exists,
+    // so anything other than that slug 404s downstream at lookup time.
     expect(classifyHost("anything.example.org", cfg)).toEqual({
       kind: "tenant",
       slug: "anything",
@@ -86,6 +91,6 @@ describe("classifyHost — single-tenant mode", () => {
   });
 
   it("lowercases the host", () => {
-    expect(classifyHost("Example.ORG", cfg)).toEqual({ kind: "tenant", slug: "main" });
+    expect(classifyHost("Example.ORG", cfg)).toEqual({ kind: "tenant", slug: "mail" });
   });
 });

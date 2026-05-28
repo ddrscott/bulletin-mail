@@ -55,6 +55,7 @@ type InstanceOverlay = {
   dmarcAddress?: string;
   noreplyAddress?: string;
   unsubscribeAddressPrefix?: string;
+  mailSubdomain?: string | null;
   archiveUrlTemplate: string;
   unsubscribeUrlTemplate: string;
   additionalReservedSlugs?: string[];
@@ -108,6 +109,7 @@ function renderVarsBlock(): string {
     ["INSTANCE_DMARC_ADDRESS", config.dmarcAddress],
     ["INSTANCE_NOREPLY_ADDRESS", config.noreplyAddress],
     ["INSTANCE_UNSUB_PREFIX", config.unsubscribeAddressPrefix],
+    ["INSTANCE_MAIL_SUBDOMAIN", config.mailSubdomain ?? undefined],
     ["INSTANCE_MIN_SLUG_LENGTH", config.minSlugLength],
     ["INSTANCE_MAX_SLUG_LENGTH", config.maxSlugLength],
     ["INSTANCE_DEFAULT_DAILY_MSG_LIMIT", config.defaultDailyMessageLimitPerTenant],
