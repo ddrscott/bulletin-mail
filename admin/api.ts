@@ -138,8 +138,21 @@ async function request(method: string, path: string, body?: unknown): Promise<un
 }
 
 export const api = {
-  requestMagicLink(email: string): Promise<unknown> {
-    return request("POST", "/api/auth/request", { email });
+  /**
+   * Public auth-page config — currently just the Turnstile site key when one
+   * is configured server-side. The site key is safe to expose; the secret
+   * stays in env. Returning `turnstileSiteKey: null` tells the SPA to skip
+   * the widget (matches the server's bypass behavior when the secret is
+   * unset).
+   */
+  authConfig(): Promise<{ turnstileSiteKey: string | null }> {
+    return request("GET", "/api/auth/config") as Promise<{ turnstileSiteKey: string | null }>;
+  },
+  requestMagicLink(email: string, turnstileToken?: string): Promise<unknown> {
+    return request("POST", "/api/auth/request", { email, turnstileToken });
+  },
+  verifyCode(email: string, code: string): Promise<{ ok: true; redirect: string }> {
+    return request("POST", "/api/auth/verify-code", { email, code }) as Promise<{ ok: true; redirect: string }>;
   },
   signupAvailable(): Promise<{ available: boolean }> {
     return request("GET", "/api/auth/signup-available") as Promise<{ available: boolean }>;

@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  formatSixDigitCode,
   generateMagicLinkToken,
+  generateSixDigitCode,
   MAGIC_LINK_LIFETIME_MS,
   renderMagicLinkEmail,
 } from "../server/lib/magic-link.js";
+import { verifyTurnstile } from "../server/lib/turnstile.js";
 import type { InstanceConfig } from "@bulletinmail/shared";
 
 const config: InstanceConfig = {
@@ -46,6 +49,51 @@ describe("MAGIC_LINK_LIFETIME_MS", () => {
   });
 });
 
+describe("generateSixDigitCode", () => {
+  it("returns exactly 6 numeric digits", () => {
+    for (let i = 0; i < 64; i++) {
+      const code = generateSixDigitCode();
+      expect(code).toMatch(/^\d{6}$/);
+    }
+  });
+
+  it("zero-pads small values", () => {
+    // Patch crypto.getRandomValues so we can force the modulo result to a
+    // small integer and confirm the zero-pad. We deliberately rebind the
+    // method so the implementation's `new Uint32Array(1)` allocation still
+    // works — we only have to fill the buffer.
+    const original = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+    try {
+      globalThis.crypto.getRandomValues = (<T extends ArrayBufferView | null>(buf: T): T => {
+        if (buf && buf instanceof Uint32Array) buf[0] = 42; // 42 % 1_000_000 === 42
+        return buf;
+      }) as typeof globalThis.crypto.getRandomValues;
+      expect(generateSixDigitCode()).toBe("000042");
+    } finally {
+      globalThis.crypto.getRandomValues = original;
+    }
+  });
+
+  it("returns varied codes across calls", () => {
+    const set = new Set(Array.from({ length: 32 }, () => generateSixDigitCode()));
+    // With a 1-in-a-million range, 32 random draws should hit nearly
+    // 32 distinct values (collision odds are ~one-in-31_250).
+    expect(set.size).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe("formatSixDigitCode", () => {
+  it("inserts a space at the midpoint", () => {
+    expect(formatSixDigitCode("123456")).toBe("123 456");
+    expect(formatSixDigitCode("000042")).toBe("000 042");
+  });
+
+  it("leaves non-6-digit input untouched", () => {
+    expect(formatSixDigitCode("12345")).toBe("12345");
+    expect(formatSixDigitCode("12 34 56")).toBe("12 34 56");
+  });
+});
+
 describe("renderMagicLinkEmail", () => {
   const built = renderMagicLinkEmail({
     config,
@@ -84,5 +132,76 @@ describe("renderMagicLinkEmail", () => {
     });
     expect(evil.html).not.toContain("<script>alert(1)</script>");
     expect(evil.html).toContain("&#60;script&#62;");
+  });
+
+  it("omits the code section entirely when no code is provided", () => {
+    expect(built.text).not.toMatch(/6-digit code/i);
+    expect(built.html).not.toMatch(/6-digit code/i);
+  });
+
+  it("includes the formatted code in both text and html when supplied", () => {
+    const withCode = renderMagicLinkEmail({
+      config,
+      recipientEmail: "alice@example.com",
+      tenantDisplayName: "Demo Org",
+      verifyUrl: "https://app.example.org/auth/verify?token=abc",
+      code: "123456",
+    });
+    expect(withCode.text).toContain("123 456");
+    expect(withCode.text).toMatch(/6-digit code/i);
+    expect(withCode.html).toContain("123 456");
+    expect(withCode.html).toMatch(/6-digit code/i);
+  });
+});
+
+describe("verifyTurnstile", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("bypasses when the secret is unset (dev mode)", async () => {
+    const fetcher = vi.fn();
+    const ok = await verifyTurnstile(undefined, "any-token", "1.2.3.4", fetcher as unknown as typeof fetch);
+    expect(ok).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("returns false when the secret is set but the token is missing", async () => {
+    const fetcher = vi.fn();
+    const ok = await verifyTurnstile("s3cret", undefined, "1.2.3.4", fetcher as unknown as typeof fetch);
+    expect(ok).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("returns false when siteverify reports success=false", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: false, "error-codes": ["invalid-input-response"] }), { status: 200 }));
+    const ok = await verifyTurnstile("s3cret", "bad-token", "1.2.3.4", fetcher as unknown as typeof fetch);
+    expect(ok).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const [url, init] = fetcher.mock.calls[0]!;
+    expect(url).toBe("https://challenges.cloudflare.com/turnstile/v0/siteverify");
+    expect(init).toMatchObject({ method: "POST" });
+    const body = (init as RequestInit).body as string;
+    expect(body).toContain("secret=s3cret");
+    expect(body).toContain("response=bad-token");
+    expect(body).toContain("remoteip=1.2.3.4");
+  });
+
+  it("returns true when siteverify reports success=true", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 }));
+    const ok = await verifyTurnstile("s3cret", "good-token", "1.2.3.4", fetcher as unknown as typeof fetch);
+    expect(ok).toBe(true);
+  });
+
+  it("returns false on a network error (does not silently bypass)", async () => {
+    const fetcher = vi.fn(async () => { throw new Error("network down"); });
+    const ok = await verifyTurnstile("s3cret", "good-token", undefined, fetcher as unknown as typeof fetch);
+    expect(ok).toBe(false);
+  });
+
+  it("returns false on a non-2xx HTTP response", async () => {
+    const fetcher = vi.fn(async () => new Response("oops", { status: 500 }));
+    const ok = await verifyTurnstile("s3cret", "good-token", undefined, fetcher as unknown as typeof fetch);
+    expect(ok).toBe(false);
   });
 });

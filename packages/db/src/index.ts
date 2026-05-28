@@ -964,12 +964,13 @@ export async function createSiteMagicLink(
   token: string,
   siteAdminId: string,
   expiresAt: number,
+  code: string | null = null,
 ): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO site_magic_links (token, site_admin_id, expires_at) VALUES (?, ?, ?)",
+      "INSERT INTO site_magic_links (token, site_admin_id, expires_at, code) VALUES (?, ?, ?, ?)",
     )
-    .bind(token, siteAdminId, expiresAt)
+    .bind(token, siteAdminId, expiresAt, code)
     .run();
 }
 
@@ -997,6 +998,51 @@ export async function consumeSiteMagicLink(
     .first<{ site_admin_id: string }>();
   if (!row) return null;
   return getSiteAdminById(db, row.site_admin_id);
+}
+
+/**
+ * Atomic consume by 6-digit code + email. Used by /api/auth/verify-code on
+ * the apex (site admin). Code lookup is scoped to the email so a typo can't
+ * accidentally sign in as someone else, and so a code collision between two
+ * concurrent sign-in requests for different humans can't cross over.
+ *
+ * Implementation:
+ *   1. SELECT the candidate (token, site_admin_id) where code+email match
+ *      and the row is unused and unexpired. If none, fail.
+ *   2. UPDATE by primary key (token), still with the unused predicate.
+ *      meta.changes === 1 proves we won the race against any concurrent
+ *      verify of the same token.
+ * The PK-scoped UPDATE avoids the ambiguity an `(code, used_at = now)`
+ * read-back would have on the (rare) two-rows-same-code collision.
+ */
+export async function consumeSiteMagicLinkByCode(
+  db: D1Database,
+  email: string,
+  code: string,
+  now: number,
+): Promise<SiteAdmin | null> {
+  const candidate = await db
+    .prepare(
+      "SELECT sml.token AS token, sml.site_admin_id AS site_admin_id " +
+        "FROM site_magic_links sml " +
+        "JOIN site_admins sa ON sa.id = sml.site_admin_id " +
+        "WHERE sml.code = ? AND sml.used_at IS NULL AND sml.expires_at > ? " +
+        "AND sa.email = ? LIMIT 1",
+    )
+    .bind(code, now, email.toLowerCase())
+    .first<{ token: string; site_admin_id: string }>();
+  if (!candidate) return null;
+
+  const updated = await db
+    .prepare(
+      "UPDATE site_magic_links SET used_at = ? " +
+        "WHERE token = ? AND used_at IS NULL AND expires_at > ?",
+    )
+    .bind(now, candidate.token, now)
+    .run();
+  if ((updated.meta.changes ?? 0) !== 1) return null;
+
+  return getSiteAdminById(db, candidate.site_admin_id);
 }
 
 /**
@@ -1218,12 +1264,13 @@ export async function createMagicLink(
   token: string,
   adminId: string,
   expiresAt: number,
+  code: string | null = null,
 ): Promise<void> {
   await db
     .prepare(
-      "INSERT INTO magic_links (token, admin_id, expires_at) VALUES (?, ?, ?)",
+      "INSERT INTO magic_links (token, admin_id, expires_at, code) VALUES (?, ?, ?, ?)",
     )
-    .bind(token, adminId, expiresAt)
+    .bind(token, adminId, expiresAt, code)
     .run();
 }
 
@@ -1255,6 +1302,56 @@ export async function consumeMagicLink(
     .first<{ admin_id: string }>();
   if (!row) return null;
   return getAdminById(db, row.admin_id);
+}
+
+/**
+ * Atomic consume by 6-digit code + email, scoped to a tenant. Used by
+ * /api/auth/verify-code on a tenant subdomain. The code lookup is scoped
+ * to (email, tenant_id) so:
+ *   - a typo can't sign in as someone else
+ *   - a code collision across tenants can't cross over
+ *   - a tenant-A admin who also exists on tenant-B can't reuse tenant-B's
+ *     code to sign in on tenant-A
+ *
+ * Implementation: same SELECT-then-UPDATE-by-PK pattern as
+ * consumeSiteMagicLinkByCode. The PK-scoped UPDATE is the source of truth
+ * for "did we win the race"; meta.changes === 1 means we consumed it.
+ */
+export async function consumeMagicLinkByCode(
+  db: D1Database,
+  tenantId: string,
+  email: string,
+  code: string,
+  now: number,
+): Promise<Admin | null> {
+  const candidate = await db
+    .prepare(
+      "SELECT ml.token AS token, ml.admin_id AS admin_id " +
+        "FROM magic_links ml " +
+        "JOIN admins a ON a.id = ml.admin_id " +
+        "WHERE ml.code = ? AND ml.used_at IS NULL AND ml.expires_at > ? " +
+        "AND a.tenant_id = ? AND a.email = ? LIMIT 1",
+    )
+    .bind(code, now, tenantId, email.toLowerCase())
+    .first<{ token: string; admin_id: string }>();
+  if (!candidate) return null;
+
+  const updated = await db
+    .prepare(
+      "UPDATE magic_links SET used_at = ? " +
+        "WHERE token = ? AND used_at IS NULL AND expires_at > ?",
+    )
+    .bind(now, candidate.token, now)
+    .run();
+  if ((updated.meta.changes ?? 0) !== 1) return null;
+
+  const admin = await getAdminById(db, candidate.admin_id);
+  // Final defence-in-depth: confirm the resolved admin really belongs to the
+  // tenant we were verifying against. The candidate JOIN already enforces
+  // this; the second check makes the invariant explicit so a future refactor
+  // of the SQL can't silently weaken the tenant scope.
+  if (!admin || admin.tenant_id !== tenantId) return null;
+  return admin;
 }
 
 // ---- Audit log --------------------------------------------------------------
