@@ -17,7 +17,10 @@
 import {
   loadFromEnv,
   mailHost,
+  tryIndexMessage,
+  type EmbeddingAi,
   type InstanceConfig,
+  type SearchIndex,
 } from "@bulletinmail/shared";
 import {
   getTenantBySlug,
@@ -41,6 +44,10 @@ export interface Env {
   DB: D1Database;
   ATTACHMENTS: R2Bucket;
   SEND_QUEUE: Queue<SendJob>;
+  /** Optional — only present when the instance enables unified search
+   *  (features.searchEnabled). Indexing is skipped when absent. */
+  AI?: EmbeddingAi;
+  SEARCH_INDEX?: SearchIndex;
   [varName: string]: unknown;
 }
 
@@ -58,7 +65,7 @@ export default {
   async email(
     message: ForwardableEmailMessage,
     env: Env,
-    _ctx: ExecutionContext,
+    ctx: ExecutionContext,
   ): Promise<void> {
     const config = loadFromEnv(env as unknown as Record<string, unknown>);
 
@@ -201,6 +208,23 @@ export default {
     }
 
     await updateMessageStatus(env.DB, messageId, "queued");
+
+    // Unified search (community hub 4/5): embed + upsert into Vectorize,
+    // fire-and-forget. Skipped when the instance hasn't enabled search
+    // (bindings absent); failures log inside tryIndexMessage and never
+    // touch the mail path.
+    ctx.waitUntil(
+      tryIndexMessage(env.AI, env.SEARCH_INDEX, {
+        messageId,
+        tenantId: tenant.id,
+        groupId: group.id,
+        // insertMessage uses the new id as thread root when there is no parent.
+        threadId: parent?.thread_id ?? messageId,
+        subject: parsed.subject || "(no subject)",
+        bodyText: parsed.bodyText,
+        receivedAt: parsed.receivedAt,
+      }),
+    );
 
     await appendAudit(env.DB, {
       tenantId: tenant.id,

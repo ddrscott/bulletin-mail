@@ -25,7 +25,7 @@
  */
 
 import type { Hono, Context } from "hono";
-import { gravatarHash, newUlid } from "@bulletinmail/shared";
+import { gravatarHash, newUlid, tryIndexWikiPage, type EmbeddingAi } from "@bulletinmail/shared";
 import { getAdminById, getAdminsByEmail, type Admin, type Tenant } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
 import {
@@ -208,6 +208,19 @@ export function mountWikiRoutes(
       }),
     );
 
+    // Unified search: (re)index the page — upsert by stable id, so saves
+    // overwrite the previous vector. No-op when search isn't enabled.
+    c.executionCtx.waitUntil(
+      tryIndexWikiPage(c.env.AI as unknown as EmbeddingAi | undefined, c.env.SEARCH_INDEX, {
+        tenantId: tenant.id,
+        slug,
+        title,
+        mdSource,
+        visibility,
+        updatedAt: Date.now(),
+      }),
+    );
+
     // Strip the previousMdSource from the wire response — clients never
     // need it and the source can be large.
     return c.json({ pageId: saved.pageId, versionId: saved.versionId }, 200);
@@ -236,6 +249,18 @@ export function mountWikiRoutes(
     if (!out) return c.json({ error: "revert_failed" }, 500);
     // Re-cache R2 with the reverted HTML.
     await writeR2Page(c, tenant.slug, slug, ver.html_compiled, page.title, page.visibility);
+    // Search index follows the live content — reverting changes the page, so
+    // re-embed the restored markdown (same stable vector id → overwrite).
+    c.executionCtx.waitUntil(
+      tryIndexWikiPage(c.env.AI as unknown as EmbeddingAi | undefined, c.env.SEARCH_INDEX, {
+        tenantId: tenant.id,
+        slug,
+        title: page.title,
+        mdSource: ver.md_source,
+        visibility: page.visibility === "private" ? "private" : "public",
+        updatedAt: Date.now(),
+      }),
+    );
     return c.json(out);
   }));
 

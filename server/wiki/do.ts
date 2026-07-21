@@ -92,6 +92,11 @@ export type ActivityRow = {
   page_id: string;
   page_slug: string;
   page_title: string;
+  /** When the PAGE was created — lets consumers (weekly digest) classify a
+   *  version as "new page" vs "update" without a second round-trip. */
+  page_created_at: number;
+  /** Current page visibility — digest consumers must skip private pages. */
+  page_visibility: PageVisibility;
   author_admin_id: string;
   note: string | null;
   summary: string | null;
@@ -309,6 +314,8 @@ export class TenantWikiDO extends DurableObject {
                 v.page_id AS page_id,
                 p.slug AS page_slug,
                 p.title AS page_title,
+                p.created_at AS page_created_at,
+                p.visibility AS page_visibility,
                 v.author_admin_id AS author_admin_id,
                 v.note AS note,
                 v.summary AS summary,

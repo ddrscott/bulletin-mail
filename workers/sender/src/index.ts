@@ -36,11 +36,15 @@ import {
   OutboundAssertionFailure,
 } from "@bulletinmail/mime";
 import { runDailyDigest } from "./digest.js";
+import { runWeeklyDigest, WEEKLY_DIGEST_CRON } from "./weekly-digest.js";
 
 export interface Env {
   DB: D1Database;
   ATTACHMENTS: R2Bucket;
   EMAIL: SendEmail;
+  /** Cross-script binding to the web Worker's TenantWikiDO — feeds the
+   *  weekly digest's wiki section. Optional at runtime (digest degrades). */
+  WIKI?: DurableObjectNamespace;
   [varName: string]: unknown;
 }
 
@@ -87,14 +91,20 @@ export default {
     }
   },
 
-  // Cron-driven daily digest. Schedule is in wrangler.toml under [triggers].
+  // Cron-driven digests. Schedules live in wrangler.toml under [triggers];
+  // the cron expression picks the job: weekly member digest on Sundays,
+  // daily moderator digest otherwise.
   async scheduled(
-    _event: ScheduledController,
+    event: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
     const config = loadFromEnv(env as unknown as Record<string, unknown>);
-    ctx.waitUntil(runDailyDigest(env, config));
+    if (event.cron === WEEKLY_DIGEST_CRON) {
+      ctx.waitUntil(runWeeklyDigest(env, config));
+    } else {
+      ctx.waitUntil(runDailyDigest(env, config));
+    }
   },
 };
 

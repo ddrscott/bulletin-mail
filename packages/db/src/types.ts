@@ -73,6 +73,9 @@ export type Member = {
   bounce_count: number;
   last_bounce_at: number | null;
   joined_at: number;
+  /** 1 = don't send the weekly activity digest. Distinct from unsubscribe:
+   *  list mail still flows. Migration 0008. */
+  digest_opt_out: 0 | 1;
 };
 
 export type MessageStatus =

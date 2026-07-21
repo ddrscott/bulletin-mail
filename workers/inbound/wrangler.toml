@@ -28,6 +28,19 @@ bucket_name = "bulletinmail-attachments"
 binding = "SEND_QUEUE"
 queue = "bulletinmail-send"
 
+# Unified search (optional). Workers AI embeds inbound messages; Vectorize
+# stores the vectors. render-wrangler REMOVES the vectorize block for
+# instances that don't set features.searchEnabled — the code checks binding
+# presence and skips indexing when absent. Setup for enabled instances:
+#   wrangler vectorize create bulletinmail-search --dimensions=768 --metric=cosine
+#   wrangler vectorize create-metadata-index bulletinmail-search --property-name=tenant_id --type=string
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "SEARCH_INDEX"
+index_name = "bulletinmail-search"
+
 [observability]
 enabled = true
 

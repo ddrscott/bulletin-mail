@@ -78,6 +78,20 @@ export function classifyHost(host: string, config: HostConfig): HostKind {
 }
 
 /**
+ * Web origin for a tenant's pages (wiki, archive, /t/<id> permalinks). In
+ * multi-tenant mode that's the tenant subdomain; in single-tenant mode the
+ * apex itself serves the tenant (the slug only labels the MAIL subdomain),
+ * so links must point at the apex. Used by digest emails and anything else
+ * that builds absolute tenant URLs outside a request context.
+ */
+export function tenantWebBase(config: HostConfig, tenantSlug: string): string {
+  if (isSingleTenant(config) && tenantSlug === singleTenantSlug(config)) {
+    return `https://${config.apexDomain}`;
+  }
+  return `https://${tenantSlug}.${config.apexDomain}`;
+}
+
+/**
  * Convenience: return the tenant slug or null. Use classifyHost() when you
  * need to distinguish apex vs tenant vs unknown.
  */

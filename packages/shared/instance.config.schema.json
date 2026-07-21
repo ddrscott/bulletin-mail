@@ -91,6 +91,11 @@
           "type": "boolean",
           "default": false,
           "description": "When true, the apex domain IS the tenant (no <slug>.<apex> subdomains). The wiki, /admin/, /join/, /auth/ all serve from the apex root. The single tenant is identified by the fixed slug 'main'. First admin signup atomically creates the tenant row + admin. The marketing landing page and Astro docs are skipped. Set this in the deployments/<apex>/instance.config.json overlay for single-org deployments."
+        },
+        "searchEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Unified search over the mail archive + wiki via Cloudflare Vectorize + Workers AI embeddings. When true, render-wrangler keeps the Vectorize binding blocks in the web + inbound Workers (the operator must first create the index: wrangler vectorize create bulletinmail-search --dimensions=768 --metric=cosine, plus a tenant_id string metadata index). When false (default) the binding blocks are stripped, the /search UI hides, and all indexing hooks no-op. The weekly digest works either way — it has no AI/Vectorize dependency."
         }
       }
     }

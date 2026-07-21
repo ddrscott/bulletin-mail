@@ -1,4 +1,4 @@
-import type { InstanceConfig } from "@bulletinmail/shared";
+import type { InstanceConfig, SearchIndex } from "@bulletinmail/shared";
 import type { Admin, SiteAdmin, Tenant } from "@bulletinmail/db";
 
 /**
@@ -12,7 +12,13 @@ export interface Env {
   WIKI: DurableObjectNamespace;   // TenantWikiDO, one instance per tenant
   WIKI_R2: R2Bucket;              // compiled HTML + uploaded images
   ATTACHMENTS: R2Bucket;          // message attachments (written by inbound)
-  AI: Ai;                          // Workers AI binding — wiki edit summaries
+  AI: Ai;                          // Workers AI binding — wiki edit summaries + search embeddings
+  /**
+   * Vectorize index for unified search (archive + wiki). OPTIONAL: only
+   * bound when the instance enables features.searchEnabled. When absent the
+   * /search UI hides and all indexing hooks no-op.
+   */
+  SEARCH_INDEX?: SearchIndex;
   UNSUB_TOKEN_PEPPER: string;     // `wrangler secret put`
   ADMIN_API_JWT_SECRET: string;   // `wrangler secret put`
   DISCORD_WEBHOOK: string;        // `wrangler secret put` — /contact form sink

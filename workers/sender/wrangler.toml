@@ -24,11 +24,26 @@ dead_letter_queue = "bulletinmail-send-dlq"
 [[send_email]]
 name = "EMAIL"
 
-# Daily moderator-digest cron. 14:00 UTC = 09:00 ET / 06:00 PT — lands in
-# inbox well before workday begins for both coasts. Single instance-wide
-# schedule; the handler iterates over every tenant with pending requests.
+# Cron schedules (the handler dispatches on the expression — keep these in
+# sync with the constants in src/):
+#   "0 14 * * *" — daily moderator digest (pending subscription requests).
+#     14:00 UTC = 09:00 ET / 06:00 PT, lands before the workday.
+#   "0 23 * * 0" — weekly member digest (list + wiki activity recap).
+#     Sunday 23:00 UTC = Sunday evening US (18:00 ET / 15:00 PT). Must match
+#     WEEKLY_DIGEST_CRON in src/weekly-digest.ts.
 [triggers]
-crons = ["0 14 * * *"]
+crons = ["0 14 * * *", "0 23 * * 0"]
+
+# Cross-script binding to the web Worker's per-tenant wiki DO — the weekly
+# digest reads recent wiki activity through it. `script_name` is the web
+# Worker's constant name (see root wrangler.toml), so deploy the web Worker
+# BEFORE the sender on a fresh install. At runtime the binding is optional:
+# if the DO is unreachable (or this block is removed) the digest still
+# sends, minus the wiki section.
+[[durable_objects.bindings]]
+name = "WIKI"
+class_name = "TenantWikiDO"
+script_name = "bulletinmail-web"
 
 [observability]
 enabled = true

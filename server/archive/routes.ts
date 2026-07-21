@@ -22,7 +22,15 @@
  */
 
 import type { Hono, Context } from "hono";
-import { classifyHost } from "@bulletinmail/shared";
+import {
+  buildMessageVectors,
+  classifyHost,
+  searchTenant,
+  tryIndexMessage,
+  tryIndexWikiPage,
+  type EmbeddingAi,
+  type SearchMatch,
+} from "@bulletinmail/shared";
 import {
   appendAudit,
   consumeMagicLinkByCode,
@@ -33,11 +41,13 @@ import {
   getGroupById,
   getGroupByLocalpart,
   getMemberByEmail,
+  getMessageById,
   getTenantBySlug,
   insertMessage,
   listAttachmentsByThread,
   listGroupsByTenant,
   listMessagesByThread,
+  listMessagesForSearchBackfill,
   listThreadsByGroup,
   type Admin,
   type Attachment,
@@ -60,6 +70,7 @@ import {
   type PostFormState,
   type RenderedMessage,
 } from "./render.js";
+import { renderSearchPage, wikiMatchToItem, type SearchResultItem } from "./search.js";
 import {
   fanOutWebPost,
   normalizeBody,
@@ -96,7 +107,107 @@ export function mountArchiveRoutes(
       productName: c.var.config.productName,
       viewerLabel: viewer.label,
       groups,
+      searchEnabled: searchBindings(c) !== null,
     }));
+  }));
+
+  // ---- unified search (archive + wiki, Vectorize) --------------------------
+  // Hidden entirely (404) when the instance hasn't enabled search — the
+  // binding presence IS the feature flag.
+  app.get("/search", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
+    const bindings = searchBindings(c);
+    if (!bindings) return c.text("not found", 404);
+    const query = (c.req.query("q") ?? "").slice(0, 200);
+
+    let items: SearchResultItem[] | null = [];
+    if (query.trim() !== "") {
+      try {
+        const matches = await searchTenant(bindings.ai, bindings.index, tenant.id, query, 20);
+        items = await resolveSearchMatches(c, tenant, viewer, matches);
+      } catch (err) {
+        console.error("search: query failed", err);
+        items = null;
+      }
+    }
+    return c.html(renderSearchPage({
+      tenant,
+      productName: c.var.config.productName,
+      viewerLabel: viewer.label,
+      query,
+      items,
+    }));
+  }));
+
+  // ---- search backfill (tenant admin) --------------------------------------
+  // Indexes pre-existing content in slices so a single call stays inside
+  // Worker subrequest limits. Call repeatedly until nextCursor is null:
+  //   curl -X POST -b "<admin cookie>" https://<tenant-host>/api/search/backfill
+  //   curl -X POST ... "https://<tenant-host>/api/search/backfill?cursor=<nextCursor>"
+  // Wiki pages are (re)indexed on the first slice only; messages walk the
+  // archive oldest-first by ulid keyset.
+  app.post("/api/search/backfill", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
+    if (viewer.kind !== "admin") return c.json({ error: "forbidden" }, 403);
+    const bindings = searchBindings(c);
+    if (!bindings) return c.json({ error: "search_not_enabled" }, 404);
+
+    const cursor = c.req.query("cursor") ?? "";
+    const BATCH = 50;
+
+    const rows = await listMessagesForSearchBackfill(c.env.DB, tenant.id, cursor, BATCH);
+    let indexedMessages = 0;
+    if (rows.length > 0) {
+      const vectors = await buildMessageVectors(
+        bindings.ai,
+        rows.map((r) => ({
+          messageId: r.id,
+          tenantId: tenant.id,
+          groupId: r.group_id,
+          threadId: r.thread_id,
+          subject: r.subject,
+          bodyText: r.body_text,
+          receivedAt: r.received_at,
+        })),
+      );
+      await bindings.index.upsert(vectors);
+      indexedMessages = vectors.length;
+    }
+
+    // Wiki pages only on the first slice — small-org wikis are a handful of
+    // pages, and upserts by stable id are idempotent anyway.
+    let indexedPages = 0;
+    if (cursor === "") {
+      try {
+        const stub = c.env.WIKI.get(c.env.WIKI.idFromName(tenant.slug));
+        const pages = await backfillDoRpc<Array<{ slug: string }>>(stub, "listPages", {});
+        for (const p of pages) {
+          const page = await backfillDoRpc<{
+            slug: string;
+            title: string;
+            md_source: string;
+            visibility: "public" | "private";
+            updated_at: number;
+          } | null>(stub, "getPage", { slug: p.slug });
+          if (!page) continue;
+          await tryIndexWikiPage(bindings.ai, bindings.index, {
+            tenantId: tenant.id,
+            slug: page.slug,
+            title: page.title,
+            mdSource: page.md_source,
+            visibility: page.visibility === "private" ? "private" : "public",
+            updatedAt: page.updated_at,
+          });
+          indexedPages++;
+        }
+      } catch (err) {
+        console.error("search: wiki backfill failed", err);
+      }
+    }
+
+    return c.json({
+      indexedMessages,
+      indexedPages,
+      nextCursor: rows.length === BATCH ? rows[rows.length - 1]!.id : null,
+    });
   }));
 
   // ---- attachment download (registered before /archive/:group so the
@@ -256,6 +367,74 @@ export function mountArchiveRoutes(
     }
     return invalid();
   });
+}
+
+// ---- search helpers ---------------------------------------------------------
+
+/** Both bindings present → search is enabled for this instance. */
+function searchBindings(c: Ctx): { ai: EmbeddingAi; index: NonNullable<Env["SEARCH_INDEX"]> } | null {
+  const ai = c.env.AI as unknown as EmbeddingAi | undefined;
+  const index = c.env.SEARCH_INDEX;
+  if (!ai || !index) return null;
+  return { ai, index };
+}
+
+/**
+ * Turn raw tenant-scoped Vectorize matches into viewer-visible result rows.
+ * Message hits are re-read from D1 and pass the same canViewGroup gate the
+ * archive uses; wiki hits render from metadata (private pages admin-only).
+ * Order (best score first) is preserved.
+ */
+async function resolveSearchMatches(
+  c: Ctx,
+  tenant: Tenant,
+  viewer: ArchiveViewer,
+  matches: SearchMatch[],
+): Promise<SearchResultItem[]> {
+  const groupById = new Map<string, Group>();
+  for (const g of await listGroupsByTenant(c.env.DB, tenant.id)) groupById.set(g.id, g);
+
+  const items: SearchResultItem[] = [];
+  for (const match of matches) {
+    if (match.id.startsWith("wiki:")) {
+      const item = wikiMatchToItem(match, viewer.kind === "admin");
+      if (item) items.push(item);
+      continue;
+    }
+    if (!match.id.startsWith("msg:")) continue;
+    const message = await getMessageById(c.env.DB, match.id.slice("msg:".length));
+    if (!message) continue;
+    const group = groupById.get(message.group_id);
+    if (!group || group.tenant_id !== tenant.id) continue;
+    if (!canViewGroup(viewer, group)) continue;
+    items.push({
+      kind: "message",
+      title: message.subject || "(no subject)",
+      snippet: typeof match.metadata?.snippet === "string" ? match.metadata.snippet : "",
+      href: `/t/${message.thread_id}#m-${message.id}`,
+      score: match.score,
+      context: group.display_name,
+      when: message.received_at,
+    });
+  }
+  return items;
+}
+
+/** Minimal DO JSON-RPC call for the wiki backfill (same wire shape as
+ *  server/wiki/routes.ts#callDo — duplicated to avoid a cross-module export
+ *  of wiki internals). */
+async function backfillDoRpc<T>(
+  stub: DurableObjectStub,
+  method: string,
+  payload: unknown,
+): Promise<T> {
+  const res = await stub.fetch(`https://do.local/rpc/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`DO rpc ${method} failed (${res.status})`);
+  return (await res.json()) as T;
 }
 
 // ---- viewer resolution ------------------------------------------------------
@@ -548,6 +727,20 @@ async function acceptWebPost(c: Ctx, args: AcceptWebPostArgs): Promise<AcceptWeb
       tenant: args.tenant,
       group: args.group,
       messageId,
+    }),
+  );
+
+  // Unified search: index the web post exactly like an emailed one. No-op
+  // when the instance hasn't enabled search; failures never surface.
+  c.executionCtx.waitUntil(
+    tryIndexMessage(c.env.AI as unknown as EmbeddingAi | undefined, c.env.SEARCH_INDEX, {
+      messageId,
+      tenantId: args.tenant.id,
+      groupId: args.group.id,
+      threadId: args.parent?.thread_id ?? messageId,
+      subject: args.subject,
+      bodyText: args.body,
+      receivedAt: Date.now(),
     }),
   );
 

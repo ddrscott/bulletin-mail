@@ -72,6 +72,12 @@ new_sqlite_classes = ["TenantWikiDO"]
 binding = "WIKI_R2"
 bucket_name = "bulletinmail-wiki"
 
+# Message attachments — written by the inbound Worker, read here by the
+# archive browser's auth-checked download route (/archive/att/:id).
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "bulletinmail-attachments"
+
 # Workers AI — used by the wiki to summarize edits for the activity feed.
 # The model id and prompt live in server/wiki/summary.ts. Pricing: per-call
 # on the llama 70b family; one diff per page save → well under 1¢ per save
@@ -80,6 +86,13 @@ bucket_name = "bulletinmail-wiki"
 [ai]
 binding = "AI"
 
+# Unified search (optional — community hub 4/5). Same index the inbound
+# Worker writes message vectors into; this Worker adds wiki-page vectors on
+# save and serves the tenant /search page. render-wrangler REMOVES this
+# block for instances that don't set features.searchEnabled; the code checks
+# binding presence and hides the search UI when absent. Setup:
+#   wrangler vectorize create bulletinmail-search --dimensions=768 --metric=cosine
+#   wrangler vectorize create-metadata-index bulletinmail-search --property-name=tenant_id --type=string
 [observability]
 enabled = true
 

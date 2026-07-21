@@ -86,6 +86,17 @@ bucket_name = "bulletinmail-attachments"
 [ai]
 binding = "AI"
 
+# Unified search (optional — community hub 4/5). Same index the inbound
+# Worker writes message vectors into; this Worker adds wiki-page vectors on
+# save and serves the tenant /search page. render-wrangler REMOVES this
+# block for instances that don't set features.searchEnabled; the code checks
+# binding presence and hides the search UI when absent. Setup:
+#   wrangler vectorize create bulletinmail-search --dimensions=768 --metric=cosine
+#   wrangler vectorize create-metadata-index bulletinmail-search --property-name=tenant_id --type=string
+[[vectorize]]
+binding = "SEARCH_INDEX"
+index_name = "bulletinmail-search"
+
 [observability]
 enabled = true
 

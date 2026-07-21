@@ -18,10 +18,12 @@ import {
   type InstanceConfig,
 } from "@bulletinmail/shared";
 import {
+  appendAudit,
   getGroupByLocalpart,
   getMemberByEmail,
   getTenantBySlug,
   insertSubscriptionRequest,
+  setDigestOptOutByToken,
   type Group,
   type Tenant,
 } from "@bulletinmail/db";
@@ -69,6 +71,28 @@ export function mountTenant(app: Hono<{ Bindings: Env; Variables: AppVariables }
     if (result.kind !== "tenant") return next();
     const groupLocal = c.req.param("group").toLowerCase();
     return handleJoinSubmit(c, result.slug, groupLocal);
+  });
+
+  // Weekly-digest opt-out — token-capability link from the digest footer.
+  // GET shows a confirm page (mail scanners follow links; don't act on GET),
+  // POST flips digest_opt_out for every membership sharing the email. This
+  // is NOT a list unsubscribe — list mail keeps flowing.
+  app.get("/digest/unsub/:token", async (c, next) => {
+    if (classifyHostFromCtx(c).kind !== "tenant") return next();
+    return c.html(digestOptOutConfirmPage(c.var.config, c.req.param("token")), 200);
+  });
+
+  app.post("/digest/unsub/:token", async (c, next) => {
+    if (classifyHostFromCtx(c).kind !== "tenant") return next();
+    const outcome = await setDigestOptOutByToken(c.env.DB, c.req.param("token"));
+    if (!outcome) return c.html(notFoundPage(c.var.config), 404);
+    await appendAudit(c.env.DB, {
+      tenantId: outcome.tenantId,
+      actor: `member:${outcome.email}`,
+      action: "digest.opt_out",
+      details: null,
+    });
+    return c.html(digestOptOutDonePage(c.var.config, outcome.email), 200);
   });
 
   // Existing tenant-subdomain catch-all (group archive short-link + landing).
@@ -264,6 +288,23 @@ function alreadySubscribedPage(config: InstanceConfig, tenant: Tenant, group: Gr
     </header>
     <p>The email you submitted is already an active subscriber to <strong>${esc(group.display_name)}</strong>. No action needed — you should be receiving messages.</p>
     <p class="small muted">If you're not getting messages, check your spam folder or contact the list moderator.</p>
+  `);
+}
+
+function digestOptOutConfirmPage(config: InstanceConfig, token: string): string {
+  return shellHtml(config, "Stop the weekly digest?", `
+    <h1>Stop the weekly digest?</h1>
+    <p>You'll no longer receive the weekly activity summary email. Regular list messages are <strong>not</strong> affected — this only stops the digest.</p>
+    <form method="post" action="/digest/unsub/${esc(token)}">
+      <button type="submit" class="primary">Stop sending me the digest</button>
+    </form>
+  `);
+}
+
+function digestOptOutDonePage(config: InstanceConfig, email: string): string {
+  return shellHtml(config, "Digest stopped", `
+    <h1>Done.</h1>
+    <p>The weekly digest will no longer be sent to <strong>${esc(email)}</strong>. Regular list messages continue as before.</p>
   `);
 }
 

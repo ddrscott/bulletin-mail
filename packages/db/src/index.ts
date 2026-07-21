@@ -17,6 +17,7 @@
 import type {
   Admin,
   AdminRole,
+  ArchiveVisibility,
   Attachment,
   Delivery,
   DeliveryStatus,
@@ -43,7 +44,7 @@ const GROUP_COLS =
   "subscribe_statement, created_at";
 const MEMBER_COLS =
   "id, group_id, email, display_name, role, delivery_mode, status, " +
-  "bounce_count, last_bounce_at, joined_at";
+  "bounce_count, last_bounce_at, joined_at, digest_opt_out";
 const MESSAGE_COLS =
   "id, group_id, original_message_id, in_reply_to_outbound, thread_id, " +
   "from_email, from_name, subject, body_text, body_html, has_attachments, " +
@@ -1540,6 +1541,165 @@ export async function countRecentMessagesFromSender(
     .bind(tenantId, fromEmail.toLowerCase(), since)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+// ---- Weekly digest ----------------------------------------------------------
+
+/**
+ * Per-thread activity for a tenant since `since` (Unix ms). One row per
+ * thread that received at least one archive-visible message in the window,
+ * joined to its group so the digest builder can apply per-recipient group
+ * visibility without extra queries. `started_in_window` distinguishes brand
+ * new threads from older threads that picked up replies.
+ */
+export type WeeklyThreadActivityRow = {
+  thread_id: string;
+  group_id: string;
+  group_name: string;
+  group_display_name: string;
+  archive_visibility: ArchiveVisibility;
+  subject: string;
+  new_messages: number;
+  participant_count: number;
+  last_activity_at: number;
+  started_in_window: 0 | 1;
+};
+
+export async function listWeeklyThreadActivity(
+  db: D1Database,
+  tenantId: string,
+  since: number,
+): Promise<WeeklyThreadActivityRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT
+         m.thread_id AS thread_id,
+         g.id AS group_id,
+         g.name AS group_name,
+         g.display_name AS group_display_name,
+         g.archive_visibility AS archive_visibility,
+         (SELECT r.subject FROM messages r WHERE r.thread_id = m.thread_id
+            AND r.group_id = m.group_id ORDER BY r.received_at ASC LIMIT 1) AS subject,
+         COUNT(*) AS new_messages,
+         COUNT(DISTINCT m.from_email) AS participant_count,
+         MAX(m.received_at) AS last_activity_at,
+         (SELECT MIN(r.received_at) FROM messages r WHERE r.thread_id = m.thread_id
+            AND r.group_id = m.group_id) >= ? AS started_in_window
+       FROM messages m
+       JOIN groups g ON g.id = m.group_id
+       WHERE g.tenant_id = ? AND m.received_at >= ?
+         AND m.${ARCHIVE_STATUS_PREDICATE}
+       GROUP BY m.thread_id
+       ORDER BY g.name, last_activity_at DESC`,
+    )
+    .bind(since, tenantId, since)
+    .all<WeeklyThreadActivityRow>();
+  return results ?? [];
+}
+
+/**
+ * One row per distinct email that should receive the weekly digest: active
+ * membership in at least one of the tenant's groups, AND no member row for
+ * that email has opted out (opt-out flips every row, so MAX() is the
+ * conservative read). member_id is an arbitrary-but-stable row for the
+ * email — used to mint the digest opt-out token.
+ */
+export type DigestRecipientRow = {
+  email: string;
+  display_name: string | null;
+  member_id: string;
+};
+
+export async function listDigestRecipientsForTenant(
+  db: D1Database,
+  tenantId: string,
+): Promise<DigestRecipientRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT m.email AS email,
+              MAX(m.display_name) AS display_name,
+              MIN(m.id) AS member_id
+       FROM members m
+       JOIN groups g ON g.id = m.group_id
+       WHERE g.tenant_id = ? AND m.status = 'active'
+       GROUP BY m.email
+       HAVING MAX(m.digest_opt_out) = 0
+       ORDER BY m.email`,
+    )
+    .bind(tenantId)
+    .all<DigestRecipientRow>();
+  return results ?? [];
+}
+
+/**
+ * Opt the human behind an unsub token out of the weekly digest. Flips
+ * digest_opt_out on EVERY member row sharing the email within the token's
+ * tenant (one human, many group memberships). Returns the email + tenant on
+ * success so the route can render a confirmation, null on unknown token.
+ * List delivery is untouched — this is not an unsubscribe.
+ */
+export async function setDigestOptOutByToken(
+  db: D1Database,
+  token: string,
+): Promise<{ email: string; tenantId: string } | null> {
+  const row = await db
+    .prepare(
+      `SELECT m.email AS email, g.tenant_id AS tenant_id
+       FROM unsub_tokens t
+       JOIN members m ON m.id = t.member_id
+       JOIN groups g ON g.id = m.group_id
+       WHERE t.token = ?`,
+    )
+    .bind(token)
+    .first<{ email: string; tenant_id: string }>();
+  if (!row) return null;
+
+  await db
+    .prepare(
+      `UPDATE members SET digest_opt_out = 1
+       WHERE email = ? AND group_id IN (SELECT id FROM groups WHERE tenant_id = ?)`,
+    )
+    .bind(row.email, row.tenant_id)
+    .run();
+  return { email: row.email, tenantId: row.tenant_id };
+}
+
+// ---- Search backfill --------------------------------------------------------
+
+export type SearchBackfillMessageRow = {
+  id: string;
+  group_id: string;
+  thread_id: string;
+  subject: string;
+  body_text: string | null;
+  received_at: number;
+};
+
+/**
+ * Keyset-paginated slice of a tenant's archive-visible messages for the
+ * search backfill endpoint. Message ids are ulids (time-ordered), so `id >
+ * cursor` walks the archive oldest-first with a stable, index-friendly key.
+ * Pass cursor = "" (or the last id of the previous page) to continue.
+ */
+export async function listMessagesForSearchBackfill(
+  db: D1Database,
+  tenantId: string,
+  cursor: string,
+  limit: number,
+): Promise<SearchBackfillMessageRow[]> {
+  const capped = Math.min(Math.max(1, limit), 100);
+  const { results } = await db
+    .prepare(
+      `SELECT m.id, m.group_id, m.thread_id, m.subject, m.body_text, m.received_at
+       FROM messages m
+       JOIN groups g ON g.id = m.group_id
+       WHERE g.tenant_id = ? AND m.id > ? AND m.${ARCHIVE_STATUS_PREDICATE}
+       ORDER BY m.id ASC
+       LIMIT ?`,
+    )
+    .bind(tenantId, cursor, capped)
+    .all<SearchBackfillMessageRow>();
+  return results ?? [];
 }
 
 // ---- Member magic links (archive sign-in) -----------------------------------

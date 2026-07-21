@@ -98,7 +98,7 @@ function postBanners(form: PostFormState, postedText: string): string {
   return posted + errors;
 }
 
-type ShellOpts = {
+export type ShellOpts = {
   tenant: Tenant;
   productName: string;
   title: string;
@@ -108,7 +108,8 @@ type ShellOpts = {
   body: string;
 };
 
-function shell({ tenant, productName, title, crumbs, viewerLabel, body }: ShellOpts): string {
+/** Shared archive page chrome — also used by the /search page. */
+export function shell({ tenant, productName, title, crumbs, viewerLabel, body }: ShellOpts): string {
   const crumbHtml = crumbs
     .map((cr, i) =>
       i === crumbs.length - 1 || !cr.href
@@ -200,6 +201,8 @@ export function renderGroupIndexPage(opts: {
   productName: string;
   viewerLabel: string;
   groups: GroupWithStats[];
+  /** Render the unified-search box (instance has Vectorize enabled). */
+  searchEnabled?: boolean;
 }): string {
   const items = opts.groups.length === 0
     ? `<li class="empty">No lists are visible to you yet. If you expect to see one, check that you signed in with your subscribed email address.</li>`
@@ -217,6 +220,10 @@ export function renderGroupIndexPage(opts: {
     viewerLabel: opts.viewerLabel,
     body: `<h1>List archive</h1>
       <p class="lede">Every message sent to your lists, browsable and permanent. Pick a list to see its threads.</p>
+      ${opts.searchEnabled ? `<form method="get" action="/search" class="searchbox" style="display:flex;gap:var(--space-2);margin:0 0 var(--space-6)">
+        <input type="search" name="q" placeholder="Search threads and wiki pages" aria-label="Search" maxlength="200" style="font:inherit;flex:1;padding:var(--space-2) var(--space-3);border:1px solid var(--rule);border-radius:4px;background:transparent;color:var(--ink)">
+        <button type="submit" class="primary" style="font:inherit;padding:var(--space-2) var(--space-4);border:0;border-radius:4px;background:var(--ink);color:var(--paper);cursor:pointer">Search</button>
+      </form>` : ""}
       <ul class="rowlist">${items}</ul>`,
   });
 }

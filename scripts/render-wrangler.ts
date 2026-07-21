@@ -69,6 +69,7 @@ type InstanceOverlay = {
     publicArchivesAllowed?: boolean;
     signupSelfService?: boolean;
     singleTenant?: boolean;
+    searchEnabled?: boolean;
   };
 };
 
@@ -77,6 +78,10 @@ const config = JSON.parse(readFileSync(configPath, "utf8")) as InstanceOverlay;
 type CloudflareResources = {
   account_id?: string;
   d1?: Record<string, { database_name: string; database_id: string }>;
+  /** Optional Vectorize index override, keyed by binding name, e.g.
+   *  { "SEARCH_INDEX": { "index_name": "myorg-search" } }. Only relevant
+   *  when features.searchEnabled is true. */
+  vectorize?: Record<string, { index_name: string }>;
 };
 
 const resourcesPath = join("deployments", instance, "cloudflare-resources.json");
@@ -160,6 +165,23 @@ for (const w of WORKERS) {
   }
 
   let src = readFileSync(srcPath, "utf8");
+
+  // Unified search is opt-in per instance. When features.searchEnabled is
+  // absent/false, strip every [[vectorize]] block so the deploy doesn't
+  // require a Vectorize index to exist. The Workers code checks binding
+  // presence at runtime (search UI hides, indexing hooks no-op). NOTE: the
+  // block-matcher consumes up to the next `[` — keep comments inside
+  // [[vectorize]] blocks free of square brackets.
+  if (!config.features?.searchEnabled) {
+    src = src.replace(/\[\[vectorize\]\][^[]*/g, "");
+  } else {
+    for (const [, info] of Object.entries(resources.vectorize ?? {})) {
+      src = src.replace(
+        /(\[\[vectorize\]\][^[]*?index_name = )"[^"]*"/g,
+        `$1"${info.index_name}"`,
+      );
+    }
+  }
 
   // Route substitution. Each worker carries the routing strategy it wants;
   // we only swap the apex token inside whatever it declared. The web Worker
