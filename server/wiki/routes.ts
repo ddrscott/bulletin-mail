@@ -26,13 +26,16 @@
 
 import type { Hono, Context } from "hono";
 import { gravatarHash, newUlid } from "@bulletinmail/shared";
-import { getAdminById, type Admin, type Tenant } from "@bulletinmail/db";
+import { getAdminById, getAdminsByEmail, type Admin, type Tenant } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
 import {
   buildTenantClearCookie,
   resolveTenantContext,
   sendTenantMagicLink,
 } from "./tenant-auth.js";
+import { buildMemberClearCookie, sendMemberMagicLink } from "../archive/member-auth.js";
+import { safeReturnTo } from "../archive/routes.js";
+import { formatSixDigitCode, generateSixDigitCode } from "../lib/magic-link.js";
 import { compileMarkdown, slugify } from "./markdown.js";
 import {
   renderEditorPage,
@@ -64,35 +67,71 @@ export function mountWikiRoutes(
   app: Hono<{ Bindings: Env; Variables: AppVariables }>,
 ): void {
   // ---- auth ----------------------------------------------------------------
+  // One sign-in page for both roles: tenant admins/moderators (wiki editing,
+  // admin SPA) and list members (archive browsing). /auth/request decides
+  // which magic link to send based on which table the email matches.
   app.get("/auth/sign-in", (c) => withTenant(c, ({ tenant }) =>
-    c.html(renderSignInPage({ tenant, productName: c.var.config.productName })),
+    c.html(renderSignInPage({
+      tenant,
+      productName: c.var.config.productName,
+      returnTo: safeReturnTo(c.req.query("return_to") ?? ""),
+    })),
   ));
 
   app.post("/auth/request", async (c) => withTenant(c, async ({ tenant }) => {
     const form = await c.req.formData();
     const email = String(form.get("email") ?? "").trim().toLowerCase();
+    const returnTo = safeReturnTo(String(form.get("return_to") ?? ""));
     if (!email) {
       return c.html(renderSignInPage({
-        tenant, productName: c.var.config.productName, error: "Please enter your email.",
+        tenant, productName: c.var.config.productName, returnTo,
+        error: "Please enter your email.",
       }), 400);
     }
-    c.executionCtx.waitUntil(sendTenantMagicLink({
-      db: c.env.DB,
-      email: c.env.EMAIL,
-      config: c.var.config,
-      tenant,
-      tenantHost: c.req.header("Host") ?? `${tenant.slug}.${c.var.config.apexDomain}`,
-      email_: email,
-    }));
-    return c.html(renderSignInSentPage(tenant, c.var.config.productName, email));
+    const tenantHost = c.req.header("Host") ?? `${tenant.slug}.${c.var.config.apexDomain}`;
+    // Admin/moderator first; if the email holds no admin row for this
+    // tenant, fall through to the member (archive) magic link. Both senders
+    // are silent no-ops on a miss, so an outsider learns nothing either way.
+    const admins = await getAdminsByEmail(c.env.DB, email);
+    const isAdmin = admins.some((a) => a.tenant_id === tenant.id);
+    if (isAdmin) {
+      c.executionCtx.waitUntil(sendTenantMagicLink({
+        db: c.env.DB,
+        email: c.env.EMAIL,
+        config: c.var.config,
+        tenant,
+        tenantHost,
+        email_: email,
+      }));
+    } else {
+      const code = generateSixDigitCode();
+      c.executionCtx.waitUntil(sendMemberMagicLink({
+        db: c.env.DB,
+        email: c.env.EMAIL,
+        config: c.var.config,
+        tenant,
+        tenantHost,
+        memberEmail: email,
+        code,
+        formattedCode: formatSixDigitCode(code),
+        returnTo,
+      }));
+    }
+    return c.html(renderSignInSentPage(tenant, c.var.config.productName, email, { returnTo }));
   }));
 
   // GET /auth/verify is host-dispatched in routes/admin/auth.ts (single
   // handler so both site and tenant verify go through one entry point).
+  // POST /auth/verify-code (the sent page's form) lives in archive/routes.ts.
 
-  app.post("/auth/sign-out", () =>
-    new Response(null, { status: 302, headers: { Location: "/", "Set-Cookie": buildTenantClearCookie() } }),
-  );
+  app.post("/auth/sign-out", () => {
+    // Clear BOTH session jars — a moderator who is also a subscriber may
+    // hold a member session too, and "sign out" must mean signed out.
+    const headers = new Headers({ Location: "/" });
+    headers.append("Set-Cookie", buildTenantClearCookie());
+    headers.append("Set-Cookie", buildMemberClearCookie());
+    return new Response(null, { status: 302, headers });
+  });
 
   // ---- public reads --------------------------------------------------------
   app.get("/", (c) => withTenant(c, ({ tenant, admin }) => renderWikiPage(c, tenant, admin, "index")));
@@ -443,7 +482,7 @@ function renderWikiShell(
   </header>
   <div class="dateline dateline--row">
     <div class="dateline__nav">
-      <a href="/">Wiki</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}${admin ? `<span class="sep">·</span><a href="/wiki/${esc(slug)}/edit" class="wiki-edit-link">Edit</a>` : ""}
+      <a href="/">Wiki</a><span class="sep">·</span><a href="/archive">Archive</a>${visibility === "private" ? `<span class="sep">·</span><span class="visibility-badge visibility-badge--private" title="Only your team can view this page">Private</span>` : ""}${admin ? `<span class="sep">·</span><a href="/wiki/${esc(slug)}/edit" class="wiki-edit-link">Edit</a>` : ""}
     </div>
   </div>
   <main class="wiki-main">${bodyHtml}</main>

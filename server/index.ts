@@ -75,7 +75,8 @@ mountArchive(app);
 // fallthrough below — this mount only registers JSON/HTML auth endpoints.
 mountAdmin(app);
 
-// Tenant subdomains: <tenant>.<apex>/* — wiki + /join, /api/wiki, /auth/*.
+// Tenant subdomains: <tenant>.<apex>/* — wiki + archive (/archive, /t/:id)
+// + /join, /api/wiki, /auth/*.
 mountTenant(app);
 
 // Static-asset fallthrough. Anything unmatched on apex or tenant subdomains

@@ -11,6 +11,7 @@ export interface Env {
   ASSETS: Fetcher;                // apps/admin/dist (Workers Assets)
   WIKI: DurableObjectNamespace;   // TenantWikiDO, one instance per tenant
   WIKI_R2: R2Bucket;              // compiled HTML + uploaded images
+  ATTACHMENTS: R2Bucket;          // message attachments (written by inbound)
   AI: Ai;                          // Workers AI binding — wiki edit summaries
   UNSUB_TOKEN_PEPPER: string;     // `wrangler secret put`
   ADMIN_API_JWT_SECRET: string;   // `wrangler secret put`

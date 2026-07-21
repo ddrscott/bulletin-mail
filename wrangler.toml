@@ -72,6 +72,12 @@ new_sqlite_classes = ["TenantWikiDO"]
 binding = "WIKI_R2"
 bucket_name = "bulletinmail-wiki"
 
+# Message attachments — written by the inbound Worker, read here by the
+# archive browser's auth-checked download route (/archive/att/:id).
+[[r2_buckets]]
+binding = "ATTACHMENTS"
+bucket_name = "bulletinmail-attachments"
+
 # Workers AI — used by the wiki to summarize edits for the activity feed.
 # The model id and prompt live in server/wiki/summary.ts. Pricing: per-call
 # on the llama 70b family; one diff per page save → well under 1¢ per save

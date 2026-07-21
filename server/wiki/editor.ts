@@ -17,34 +17,61 @@ type SignInOpts = {
   productName: string;
   error?: string;
   notice?: string;
+  /** Same-site path to land on after verify (e.g. an archive thread). */
+  returnTo?: string | null;
 };
 
-export function renderSignInPage({ tenant, productName, error, notice }: SignInOpts): string {
+export function renderSignInPage({ tenant, productName, error, notice, returnTo }: SignInOpts): string {
+  const returnToInput = returnTo
+    ? `<input type="hidden" name="return_to" value="${esc(returnTo)}">`
+    : "";
   return shell(productName, `Sign in — ${tenant.display_name}`, `
     <header class="masthead">
       <h1 class="wordmark">${esc(tenant.display_name)}</h1>
     </header>
-    <p class="dateline">Moderator sign-in · Magic link</p>
+    <p class="dateline">Sign in · Magic link</p>
     <h2>Sign in</h2>
-    <p class="small muted">We'll email you a one-time link.</p>
+    <p class="small muted">Moderators and list members can sign in here. We'll email you a one-time link.</p>
     ${error ? `<div class="banner banner--alert">${esc(error)}</div>` : ""}
     ${notice ? `<div class="banner banner--ok">${esc(notice)}</div>` : ""}
     <form method="post" action="/auth/request">
+      ${returnToInput}
       <input type="email" name="email" required autocomplete="email" placeholder="you@${esc(tenant.slug)}.org">
       <button type="submit" class="btn btn--primary">Send sign-in link</button>
     </form>
   `);
 }
 
-export function renderSignInSentPage(tenant: Tenant, productName: string, email: string): string {
+type SignInSentOpts = {
+  returnTo?: string | null;
+  error?: string;
+};
+
+export function renderSignInSentPage(
+  tenant: Tenant,
+  productName: string,
+  email: string,
+  opts: SignInSentOpts = {},
+): string {
+  const returnToInput = opts.returnTo
+    ? `<input type="hidden" name="return_to" value="${esc(opts.returnTo)}">`
+    : "";
   return shell(productName, `Check your inbox`, `
     <header class="masthead">
       <h1 class="wordmark">${esc(tenant.display_name)}</h1>
     </header>
-    <p class="dateline">Moderator sign-in · Sent</p>
+    <p class="dateline">Sign in · Sent</p>
     <h2>Check your email</h2>
-    <p>If <strong>${esc(email)}</strong> is a moderator for ${esc(tenant.display_name)}, we just sent a sign-in link.</p>
-    <p class="small muted">The link expires in 15 minutes.</p>
+    <p>If <strong>${esc(email)}</strong> is a moderator or list member of ${esc(tenant.display_name)}, we just sent a sign-in link.</p>
+    ${opts.error ? `<div class="banner banner--alert">${esc(opts.error)}</div>` : ""}
+    <p>You can click the link in the email, or paste the 6-digit code from it here:</p>
+    <form method="post" action="/auth/verify-code">
+      ${returnToInput}
+      <input type="hidden" name="email" value="${esc(email)}">
+      <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="123456" required>
+      <button type="submit" class="btn btn--primary">Verify code</button>
+    </form>
+    <p class="small muted">The link and code expire in 15 minutes.</p>
   `);
 }
 

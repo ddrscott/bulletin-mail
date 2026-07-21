@@ -21,8 +21,10 @@
 import type { Hono, Context } from "hono";
 import {
   consumeMagicLinkByCode,
+  consumeMemberMagicLink,
   consumeSiteMagicLinkByCode,
   countAdminsByTenant,
+  listMemberGroupIds,
   countSiteAdmins,
   createMagicLink,
   createSiteAdmin,
@@ -54,6 +56,11 @@ import {
   issueTenantSessionCookie,
 } from "../../wiki/tenant-auth.js";
 import { generateSixDigitCode, formatSixDigitCode } from "../../lib/magic-link.js";
+import {
+  buildMemberSetCookie,
+  issueMemberSessionCookie,
+} from "../../archive/member-auth.js";
+import { safeReturnTo } from "../../archive/routes.js";
 import { verifyTurnstile } from "../../lib/turnstile.js";
 import { currentTenantSlug } from "./tenant-middleware.js";
 
@@ -155,15 +162,39 @@ export function mountAuth(app: Hono<{ Bindings: Env; Variables: AppVariables }>)
     if (kind === "tenant") {
       const tenant = await currentTenant(c);
       if (!tenant) return c.html(errorPage("Tenant not found."), 404);
+      const returnTo = safeReturnTo(c.req.query("rt") ?? "");
+
+      // Admin/moderator token first (magic_links) …
       const admin = await consumeTenantMagicLink(c.env.DB, token, tenant);
-      if (!admin) {
-        return c.html(errorPage("Link is invalid, expired, or not authorized for this tenant."), 400);
+      if (admin) {
+        const cookieValue = await issueTenantSessionCookie(admin.id, tenant.id, c.env.ADMIN_API_JWT_SECRET);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: returnTo ?? "/admin/",
+            "Set-Cookie": buildTenantSetCookie(cookieValue),
+          },
+        });
       }
-      const cookieValue = await issueTenantSessionCookie(admin.id, tenant.id, c.env.ADMIN_API_JWT_SECRET);
-      return new Response(null, {
-        status: 302,
-        headers: { Location: "/admin/", "Set-Cookie": buildTenantSetCookie(cookieValue) },
-      });
+
+      // … then member token (member_magic_links) — archive sign-in. Re-check
+      // active membership at verify time so a token outlives an unsubscribe
+      // by exactly nothing.
+      const memberEmail = await consumeMemberMagicLink(c.env.DB, token, tenant.id, Date.now());
+      if (memberEmail) {
+        const groupIds = await listMemberGroupIds(c.env.DB, tenant.id, memberEmail);
+        if (groupIds.length > 0) {
+          const cookieValue = await issueMemberSessionCookie(memberEmail, tenant.id, c.env.ADMIN_API_JWT_SECRET);
+          return new Response(null, {
+            status: 302,
+            headers: {
+              Location: returnTo ?? "/archive",
+              "Set-Cookie": buildMemberSetCookie(cookieValue),
+            },
+          });
+        }
+      }
+      return c.html(errorPage("Link is invalid, expired, or not authorized for this tenant."), 400);
     }
     return c.text("Not found", 404);
   });

@@ -17,6 +17,7 @@
 import type {
   Admin,
   AdminRole,
+  Attachment,
   Delivery,
   DeliveryStatus,
   Group,
@@ -1352,6 +1353,250 @@ export async function consumeMagicLinkByCode(
   // of the SQL can't silently weaken the tenant scope.
   if (!admin || admin.tenant_id !== tenantId) return null;
   return admin;
+}
+
+// ---- Archive (read-only web view of list threads) --------------------------
+
+/**
+ * Statuses that are visible in the archive. Rejected mail never entered the
+ * list; held_moderation is not yet approved — showing either would leak
+ * content the members never received (PRD §12 #5 is about visibility of the
+ * archive itself; this is the per-message analogue).
+ */
+const ARCHIVE_STATUS_PREDICATE =
+  "status NOT IN ('rejected', 'held_moderation')";
+
+export type ThreadSummary = {
+  thread_id: string;
+  subject: string;
+  root_from_name: string | null;
+  root_from_email: string;
+  message_count: number;
+  participant_count: number;
+  started_at: number;
+  last_activity_at: number;
+  has_attachments: 0 | 1;
+};
+
+/**
+ * Thread list for a group's archive, newest activity first. One row per
+ * thread_id; subject and root sender come from the thread's earliest
+ * message. Served by idx_messages_group_received; group sizes here are
+ * small-org scale (PRD §14 — not a marketing sender).
+ */
+export async function listThreadsByGroup(
+  db: D1Database,
+  groupId: string,
+  options: { limit?: number; offset?: number } = {},
+): Promise<ThreadSummary[]> {
+  const limit = Math.min(options.limit ?? 50, 200);
+  const offset = Math.max(options.offset ?? 0, 0);
+  const { results } = await db
+    .prepare(
+      `SELECT
+         m.thread_id AS thread_id,
+         (SELECT r.subject FROM messages r WHERE r.thread_id = m.thread_id
+            AND r.group_id = m.group_id ORDER BY r.received_at ASC LIMIT 1) AS subject,
+         (SELECT r.from_name FROM messages r WHERE r.thread_id = m.thread_id
+            AND r.group_id = m.group_id ORDER BY r.received_at ASC LIMIT 1) AS root_from_name,
+         (SELECT r.from_email FROM messages r WHERE r.thread_id = m.thread_id
+            AND r.group_id = m.group_id ORDER BY r.received_at ASC LIMIT 1) AS root_from_email,
+         COUNT(*) AS message_count,
+         COUNT(DISTINCT m.from_email) AS participant_count,
+         MIN(m.received_at) AS started_at,
+         MAX(m.received_at) AS last_activity_at,
+         MAX(m.has_attachments) AS has_attachments
+       FROM messages m
+       WHERE m.group_id = ? AND m.${ARCHIVE_STATUS_PREDICATE}
+       GROUP BY m.thread_id
+       ORDER BY last_activity_at DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .bind(groupId, limit, offset)
+    .all<ThreadSummary>();
+  return results ?? [];
+}
+
+/** Total thread count for a group — drives archive pagination. */
+export async function countThreadsByGroup(
+  db: D1Database,
+  groupId: string,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT thread_id) AS n FROM messages
+       WHERE group_id = ? AND ${ARCHIVE_STATUS_PREDICATE}`,
+    )
+    .bind(groupId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/**
+ * Every archive-visible message in a thread, oldest first (thread order).
+ * The caller derives the owning group from the first row and MUST check the
+ * viewer's access to that group before rendering. The group_id equality in
+ * the WHERE keeps a hypothetical cross-group reply from leaking another
+ * group's mail into this thread's page.
+ */
+export async function listMessagesByThread(
+  db: D1Database,
+  threadId: string,
+): Promise<Message[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${MESSAGE_COLS} FROM messages
+       WHERE thread_id = ? AND ${ARCHIVE_STATUS_PREDICATE}
+         AND group_id = (SELECT group_id FROM messages WHERE id = ?)
+       ORDER BY received_at ASC`,
+    )
+    .bind(threadId, threadId)
+    .all<Message>();
+  return results ?? [];
+}
+
+/** All attachments for a thread, keyed by message in the caller. */
+export async function listAttachmentsByThread(
+  db: D1Database,
+  threadId: string,
+): Promise<Attachment[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT a.id, a.message_id, a.filename, a.content_type, a.size_bytes,
+              a.r2_key, a.content_id
+       FROM attachments a
+       JOIN messages m ON m.id = a.message_id
+       WHERE m.thread_id = ?`,
+    )
+    .bind(threadId)
+    .all<Attachment>();
+  return results ?? [];
+}
+
+export type AttachmentWithMessage = Attachment & {
+  group_id: string;
+  thread_id: string;
+};
+
+/**
+ * Attachment plus its message's group + thread — one query so the download
+ * route can auth-check group access before touching R2.
+ */
+export async function getAttachmentWithMessage(
+  db: D1Database,
+  attachmentId: string,
+): Promise<AttachmentWithMessage | null> {
+  return db
+    .prepare(
+      `SELECT a.id, a.message_id, a.filename, a.content_type, a.size_bytes,
+              a.r2_key, a.content_id, m.group_id AS group_id, m.thread_id AS thread_id
+       FROM attachments a
+       JOIN messages m ON m.id = a.message_id
+       WHERE a.id = ?`,
+    )
+    .bind(attachmentId)
+    .first<AttachmentWithMessage>();
+}
+
+/**
+ * Group ids within a tenant where this email is an active member. Drives
+ * the archive's group-level visibility: a member sees these groups plus any
+ * group with archive_visibility = 'public'.
+ */
+export async function listMemberGroupIds(
+  db: D1Database,
+  tenantId: string,
+  email: string,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT m.group_id AS group_id
+       FROM members m
+       JOIN groups g ON g.id = m.group_id
+       WHERE g.tenant_id = ? AND m.email = ? AND m.status = 'active'`,
+    )
+    .bind(tenantId, email.toLowerCase())
+    .all<{ group_id: string }>();
+  return (results ?? []).map((r) => r.group_id);
+}
+
+// ---- Member magic links (archive sign-in) -----------------------------------
+
+export async function createMemberMagicLink(
+  db: D1Database,
+  token: string,
+  tenantId: string,
+  email: string,
+  expiresAt: number,
+  code: string | null = null,
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO member_magic_links (token, tenant_id, email, code, expires_at) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(token, tenantId, email.toLowerCase(), code, expiresAt)
+    .run();
+}
+
+/**
+ * Atomically consume a member magic-link token, scoped to the tenant of the
+ * host the verify request arrived on. Same UPDATE-first race-winning pattern
+ * as consumeMagicLink. Returns the member email on success.
+ */
+export async function consumeMemberMagicLink(
+  db: D1Database,
+  token: string,
+  tenantId: string,
+  now: number,
+): Promise<string | null> {
+  const updated = await db
+    .prepare(
+      "UPDATE member_magic_links SET used_at = ? " +
+        "WHERE token = ? AND tenant_id = ? AND used_at IS NULL AND expires_at > ?",
+    )
+    .bind(now, token, tenantId, now)
+    .run();
+  if ((updated.meta.changes ?? 0) !== 1) return null;
+
+  const row = await db
+    .prepare("SELECT email FROM member_magic_links WHERE token = ?")
+    .bind(token)
+    .first<{ email: string }>();
+  return row?.email ?? null;
+}
+
+/**
+ * Atomic consume by 6-digit code, scoped to (tenant_id, email) so a code
+ * collision can never cross tenants or humans — same defense as
+ * consumeMagicLinkByCode. Returns the email on success.
+ */
+export async function consumeMemberMagicLinkByCode(
+  db: D1Database,
+  tenantId: string,
+  email: string,
+  code: string,
+  now: number,
+): Promise<string | null> {
+  const candidate = await db
+    .prepare(
+      "SELECT token, email FROM member_magic_links " +
+        "WHERE code = ? AND tenant_id = ? AND email = ? " +
+        "AND used_at IS NULL AND expires_at > ? LIMIT 1",
+    )
+    .bind(code, tenantId, email.toLowerCase(), now)
+    .first<{ token: string; email: string }>();
+  if (!candidate) return null;
+
+  const updated = await db
+    .prepare(
+      "UPDATE member_magic_links SET used_at = ? " +
+        "WHERE token = ? AND used_at IS NULL AND expires_at > ?",
+    )
+    .bind(now, candidate.token, now)
+    .run();
+  if ((updated.meta.changes ?? 0) !== 1) return null;
+  return candidate.email;
 }
 
 // ---- Audit log --------------------------------------------------------------

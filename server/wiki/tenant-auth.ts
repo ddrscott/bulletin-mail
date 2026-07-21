@@ -33,6 +33,7 @@ import {
   type Tenant,
 } from "@bulletinmail/db";
 import { systemAddress, type InstanceConfig } from "@bulletinmail/shared";
+import { formatSixDigitCode, generateSixDigitCode } from "../lib/magic-link.js";
 
 export const TENANT_COOKIE_NAME = "bm_tenant_session";
 const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -141,7 +142,8 @@ export type SendTenantMagicLinkInput = {
 /**
  * Send the magic-link email scoped to this tenant. Looks up admins for the
  * email; only sends if one matches THIS tenant. Always returns void; never
- * reveals whether the email matched.
+ * reveals whether the email matched. Includes a 6-digit paste-able code —
+ * the sign-in "sent" page offers a code form for link-rewriting filters.
  */
 export async function sendTenantMagicLink(input: SendTenantMagicLinkInput): Promise<void> {
   const admins = await getAdminsByEmail(input.db, input.email_);
@@ -152,9 +154,11 @@ export async function sendTenantMagicLink(input: SendTenantMagicLinkInput): Prom
   crypto.getRandomValues(buf);
   let token = "";
   for (let i = 0; i < buf.length; i++) token += buf[i]!.toString(16).padStart(2, "0");
+  const code = generateSixDigitCode();
+  const formattedCode = formatSixDigitCode(code);
 
   const expiresAt = Date.now() + MAGIC_LINK_LIFETIME_MS;
-  await createMagicLink(input.db, token, target.id, expiresAt);
+  await createMagicLink(input.db, token, target.id, expiresAt, code);
 
   const verifyUrl = `https://${input.tenantHost}/auth/verify?token=${token}`;
   const from = systemAddress(input.config, "noreply");
@@ -164,7 +168,11 @@ export async function sendTenantMagicLink(input: SendTenantMagicLinkInput): Prom
     "",
     verifyUrl,
     "",
-    "This link expires in 15 minutes and can only be used once.",
+    "Or paste this 6-digit code into the sign-in page:",
+    "",
+    `    ${formattedCode}`,
+    "",
+    "Link and code expire in 15 minutes and can only be used once.",
     "If you didn't request this, ignore this email.",
   ].join("\n");
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
@@ -172,7 +180,9 @@ export async function sendTenantMagicLink(input: SendTenantMagicLinkInput): Prom
 <h1 style="font-size:1.2rem">Sign in to ${esc(input.tenant.display_name)}</h1>
 <p><a href="${esc(verifyUrl)}" style="display:inline-block;padding:0.6rem 1.2rem;background:#0f172a;color:#fff;text-decoration:none;border-radius:4px">Sign in</a></p>
 <p style="color:#666;font-size:0.875rem">Or paste this URL into your browser:<br><code style="word-break:break-all">${esc(verifyUrl)}</code></p>
-<p style="color:#666;font-size:0.875rem">This link expires in 15 minutes and can only be used once.</p>
+<p style="margin-top:1.5rem">Or paste this 6-digit code into the sign-in page:</p>
+<p style="margin:0.5rem 0"><code style="display:inline-block;padding:0.5rem 0.9rem;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:4px;font:600 1.1rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:0.08em">${esc(formattedCode)}</code></p>
+<p style="color:#666;font-size:0.875rem">Link and code expire in 15 minutes and can only be used once.</p>
 </body></html>`;
   try {
     await input.email.send({

@@ -3,8 +3,8 @@
  *
  *   GET  /join/<group>         public subscribe form
  *   POST /join/<group>         accept submission, store as 'pending'
- *   GET  /g/<group>            redirect to apex archive (placeholder until
- *                              tenant archive Phase 3 lands)
+ *   GET  /g/<group>            301 → /archive/<group> (legacy short link)
+ *   /archive, /t/<id>, ...     archive browser (see ../archive/routes.ts)
  *   *                          tenant landing placeholder
  *
  * The form is server-rendered HTML — no SPA, no JS dependency on the admin
@@ -14,7 +14,6 @@
 
 import type { Hono, Context } from "hono";
 import {
-  archiveUrl,
   classifyHost,
   type InstanceConfig,
 } from "@bulletinmail/shared";
@@ -28,6 +27,7 @@ import {
 } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
 import { mountWikiRoutes } from "../wiki/routes.js";
+import { mountArchiveRoutes } from "../archive/routes.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -38,6 +38,10 @@ export function mountTenant(app: Hono<{ Bindings: Env; Variables: AppVariables }
   // Per-tenant wiki (root pages, /wiki/:slug, /auth/*, /api/wiki/*). Mount
   // FIRST so its specific paths win over the catch-all below.
   mountWikiRoutes(app);
+
+  // Archive browser (/archive, /archive/:group, /t/:threadId, attachment
+  // downloads, POST /auth/verify-code). Also before the catch-all.
+  mountArchiveRoutes(app);
 
   // Tenant admin SPA at /admin/* — explicit ASSETS fallthrough. The tenant
   // catch-all below would otherwise eat /admin/styles.css, /admin/main.js,
@@ -67,15 +71,16 @@ export function mountTenant(app: Hono<{ Bindings: Env; Variables: AppVariables }
     return handleJoinSubmit(c, result.slug, groupLocal);
   });
 
-  // Existing tenant-subdomain catch-all (group archive placeholder + landing).
+  // Existing tenant-subdomain catch-all (group archive short-link + landing).
   app.all("*", async (c, next) => {
     const result = classifyHostFromCtx(c);
     if (result.kind !== "tenant") return next();
 
+    // Legacy short link /g/<group> → the real archive on this host.
     const match = /^\/g\/([^/]+)$/.exec(new URL(c.req.url).pathname);
     if (match) {
       const groupName = match[1]!;
-      return c.redirect(archiveUrl(c.var.config, result.slug, groupName), 301);
+      return c.redirect(`/archive/${groupName}`, 301);
     }
 
     return c.text(
