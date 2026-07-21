@@ -80,6 +80,30 @@
       }
     },
 
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Workers AI tuning for the features.ai.* flags. Only consulted when at least one flag is on and the web Worker has the AI binding.",
+      "properties": {
+        "dailyGenerationCap": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 20,
+          "description": "Max AI generation calls (text or image) per tenant per UTC day. Counted in D1 (ai_usage table); once hit, generation refuses with a clear 'limit reached' message until the next UTC day."
+        },
+        "textModel": {
+          "type": "string",
+          "default": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+          "description": "Workers AI text-generation model id used by promote-to-wiki and red-link autogen. Configurable so operators can track Workers AI model deprecations without a source change."
+        },
+        "imageModel": {
+          "type": "string",
+          "default": "@cf/black-forest-labs/flux-1-schnell",
+          "description": "Workers AI text-to-image model id used for wiki hero images."
+        }
+      }
+    },
+
     "features": {
       "type": "object",
       "additionalProperties": false,
@@ -96,6 +120,28 @@
           "type": "boolean",
           "default": false,
           "description": "Unified search over the mail archive + wiki via Cloudflare Vectorize + Workers AI embeddings. When true, render-wrangler keeps the Vectorize binding blocks in the web + inbound Workers (the operator must first create the index: wrangler vectorize create bulletinmail-search --dimensions=768 --metric=cosine, plus a tenant_id string metadata index). When false (default) the binding blocks are stripped, the /search UI hides, and all indexing hooks no-op. The weekly digest works either way — it has no AI/Vectorize dependency."
+        },
+        "ai": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "LLM extras, each independently opt-in and default OFF. These are the only features that can meaningfully consume paid resources, so they ship dark. A flag alone is not enough — the web Worker must also have the Workers AI binding; when absent the features hide entirely. Zero Workers AI calls when off. See docs/how-to/ai-features.md for enabling and honest cost notes.",
+          "properties": {
+            "promoteToWiki": {
+              "type": "boolean",
+              "default": false,
+              "description": "Admins/moderators can promote an archive thread into an LLM-drafted wiki page. The draft opens in the editor for human review — never auto-published."
+            },
+            "wikiAutogen": {
+              "type": "boolean",
+              "default": false,
+              "description": "Following a red link to a missing wiki page offers signed-in editors a 'Generate draft with AI' action that writes a first draft in the wiki's voice, seeding [[links]] to existing pages."
+            },
+            "wikiHeroImages": {
+              "type": "boolean",
+              "default": false,
+              "description": "AI-generated hero images for wiki pages, stored in the wiki R2 bucket and served from /wiki/img/."
+            }
+          }
         }
       }
     }

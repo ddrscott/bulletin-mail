@@ -68,6 +68,10 @@ const PAPERCLIP_SVG =
 const SEND_SVG =
   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
 
+// Lucide "book-plus" — the promote-to-wiki action on thread pages.
+const BOOK_PLUS_SVG =
+  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v6"/><path d="M9 10h6"/><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>`;
+
 /**
  * State for the reply / new-thread forms. `null`/`undefined` on a page means
  * "viewer may not post here" — the form isn't rendered at all (matching the
@@ -304,6 +308,11 @@ export function renderThreadPage(opts: {
   messages: RenderedMessage[];
   /** Render the reply form. Omit when the viewer can't post to this group. */
   replyForm?: PostFormState | null;
+  /**
+   * POST target for promote-to-wiki (features.ai.promoteToWiki + Workers AI
+   * binding + admin viewer). Omit/null → no button at all.
+   */
+  promoteUrl?: string | null;
 }): string {
   const articles = opts.messages.map(({ message: m, bodyHtml, attachments }) => {
     const atts = attachments.length === 0 ? "" : `<ul class="att-list">${attachments
@@ -333,6 +342,13 @@ export function renderThreadPage(opts: {
       </section>`
     : "";
 
+  const promoteBox = opts.promoteUrl
+    ? `<form method="post" action="${esc(opts.promoteUrl)}" style="margin:0 0 var(--space-5)">
+        <button type="submit" class="primary" style="display:inline-flex;align-items:center;gap:var(--space-2);font:inherit;font-size:var(--text-sm);padding:var(--space-1) var(--space-3);border:1px solid var(--ink);border-radius:4px;background:transparent;color:var(--ink);cursor:pointer">${BOOK_PLUS_SVG} Promote to wiki</button>
+        <span class="form-note" style="font-size:var(--text-xs);color:var(--ink-muted);margin-left:var(--space-2)">AI drafts a wiki page from this thread — you review and edit before anything is saved.</span>
+      </form>`
+    : "";
+
   return shell({
     tenant: opts.tenant,
     productName: opts.productName,
@@ -345,6 +361,7 @@ export function renderThreadPage(opts: {
     viewerLabel: opts.viewerLabel,
     body: `<h1>${esc(opts.subject || "(no subject)")}</h1>
       <p class="lede">${opts.messages.length} message${opts.messages.length === 1 ? "" : "s"} in ${esc(opts.group.display_name)}</p>
+      ${promoteBox}
       ${articles}
       ${postBox}`,
   });

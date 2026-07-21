@@ -66,11 +66,44 @@ export type InstanceConfig = {
     contactUrl: string;
   };
 
+  /**
+   * Workers AI tuning knobs. Only consulted when at least one features.ai.*
+   * flag is on AND the deploy binds Workers AI (`env.AI`). Model ids are
+   * config, not code, so operators can track Workers AI model deprecations
+   * without a source change.
+   */
+  ai: {
+    /** Max AI generation calls (text or image) per tenant per UTC day.
+     *  Counted in D1 (`ai_usage`); callers refuse with a clear "limit
+     *  reached" message once the cap is hit. */
+    dailyGenerationCap: number;
+    /** Text-generation model for promote-to-wiki and red-link autogen. */
+    textModel: string;
+    /** Text-to-image model for wiki hero images. */
+    imageModel: string;
+  };
+
   // Feature toggles — keep this list small
   features: {
     byoDomainEnabled: boolean;
     publicArchivesAllowed: boolean;
     signupSelfService: boolean;
+    /**
+     * LLM extras, each independently opt-in and default OFF — the only part
+     * of the stack that can meaningfully consume paid resources, so they
+     * ship dark. A flag being true is necessary but not sufficient: the
+     * Worker must also have the `AI` binding, otherwise the features hide
+     * entirely (no broken buttons). Zero Workers AI calls when off.
+     */
+    ai: {
+      /** Promote a mail thread into an LLM-drafted wiki page (human-reviewed
+       *  in the editor before saving — never auto-published). */
+      promoteToWiki: boolean;
+      /** Generate a draft page when an editor follows a red link. */
+      wikiAutogen: boolean;
+      /** Generate hero images for wiki pages (stored in R2). */
+      wikiHeroImages: boolean;
+    };
     /**
      * Single-tenant deployment mode. When true, the apex domain IS the
      * tenant — the wiki, /admin/, /join/, /auth/ serve from the apex root
@@ -141,11 +174,24 @@ export const defaults = {
   defaultDailyMessageLimitPerTenant: 1000,
   defaultMaxRecipientsPerGroup: 500,
 
+  ai: {
+    dailyGenerationCap: 20,
+    // Same model the wiki edit-summary feature already uses — fast, cheap,
+    // ample context. Overridable per instance (INSTANCE_AI_TEXT_MODEL).
+    textModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    imageModel: "@cf/black-forest-labs/flux-1-schnell",
+  },
+
   features: {
     byoDomainEnabled: false,
     publicArchivesAllowed: true,
     signupSelfService: false,
     singleTenant: false,
+    ai: {
+      promoteToWiki: false,
+      wikiAutogen: false,
+      wikiHeroImages: false,
+    },
   },
 } as const;
 
@@ -233,6 +279,15 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
       contactUrl: required("INSTANCE_OPERATOR_CONTACT_URL"),
     },
 
+    ai: {
+      dailyGenerationCap: numberOr(
+        "INSTANCE_AI_DAILY_CAP",
+        defaults.ai.dailyGenerationCap,
+      ),
+      textModel: stringOr("INSTANCE_AI_TEXT_MODEL", defaults.ai.textModel),
+      imageModel: stringOr("INSTANCE_AI_IMAGE_MODEL", defaults.ai.imageModel),
+    },
+
     features: {
       byoDomainEnabled: boolOr(
         "INSTANCE_FEATURE_BYO_DOMAIN",
@@ -250,6 +305,20 @@ export function loadFromEnv(env: Record<string, unknown>): InstanceConfig {
         "INSTANCE_FEATURE_SINGLE_TENANT",
         defaults.features.singleTenant,
       ),
+      ai: {
+        promoteToWiki: boolOr(
+          "INSTANCE_FEATURE_AI_PROMOTE_TO_WIKI",
+          defaults.features.ai.promoteToWiki,
+        ),
+        wikiAutogen: boolOr(
+          "INSTANCE_FEATURE_AI_WIKI_AUTOGEN",
+          defaults.features.ai.wikiAutogen,
+        ),
+        wikiHeroImages: boolOr(
+          "INSTANCE_FEATURE_AI_WIKI_HERO_IMAGES",
+          defaults.features.ai.wikiHeroImages,
+        ),
+      },
     },
   };
 }

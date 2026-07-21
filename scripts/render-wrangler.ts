@@ -64,12 +64,22 @@ type InstanceOverlay = {
   defaultDailyMessageLimitPerTenant?: number;
   defaultMaxRecipientsPerGroup?: number;
   operator: { legalName: string; mailingAddress: string; contactUrl: string };
+  ai?: {
+    dailyGenerationCap?: number;
+    textModel?: string;
+    imageModel?: string;
+  };
   features?: {
     byoDomainEnabled?: boolean;
     publicArchivesAllowed?: boolean;
     signupSelfService?: boolean;
     singleTenant?: boolean;
     searchEnabled?: boolean;
+    ai?: {
+      promoteToWiki?: boolean;
+      wikiAutogen?: boolean;
+      wikiHeroImages?: boolean;
+    };
   };
 };
 
@@ -123,6 +133,12 @@ function renderVarsBlock(): string {
     ["INSTANCE_FEATURE_PUBLIC_ARCHIVES", config.features?.publicArchivesAllowed],
     ["INSTANCE_FEATURE_SIGNUP_SELF_SERVICE", config.features?.signupSelfService],
     ["INSTANCE_FEATURE_SINGLE_TENANT", config.features?.singleTenant],
+    ["INSTANCE_FEATURE_AI_PROMOTE_TO_WIKI", config.features?.ai?.promoteToWiki],
+    ["INSTANCE_FEATURE_AI_WIKI_AUTOGEN", config.features?.ai?.wikiAutogen],
+    ["INSTANCE_FEATURE_AI_WIKI_HERO_IMAGES", config.features?.ai?.wikiHeroImages],
+    ["INSTANCE_AI_DAILY_CAP", config.ai?.dailyGenerationCap],
+    ["INSTANCE_AI_TEXT_MODEL", config.ai?.textModel],
+    ["INSTANCE_AI_IMAGE_MODEL", config.ai?.imageModel],
   ];
   const reserved = config.additionalReservedSlugs ?? [];
   if (reserved.length > 0) {

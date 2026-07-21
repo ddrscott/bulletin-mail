@@ -30,10 +30,21 @@
     "contactUrl": "REPLACE: https://<your-apex>/contact"
   },
 
+  "ai": {
+    "dailyGenerationCap": 20,
+    "textModel": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "imageModel": "@cf/black-forest-labs/flux-1-schnell"
+  },
+
   "features": {
     "byoDomainEnabled": false,
     "publicArchivesAllowed": true,
     "signupSelfService": false,
-    "singleTenant": false
+    "singleTenant": false,
+    "ai": {
+      "promoteToWiki": false,
+      "wikiAutogen": false,
+      "wikiHeroImages": false
+    }
   }
 }

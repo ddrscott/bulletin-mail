@@ -1781,6 +1781,40 @@ export async function consumeMemberMagicLinkByCode(
   return candidate.email;
 }
 
+// ---- AI usage guardrail -----------------------------------------------------
+
+/** UTC day key ('YYYY-MM-DD') used by the ai_usage counter. */
+export function aiUsageDay(now: number = Date.now()): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * Consume one unit of the tenant's daily AI generation budget. Atomic
+ * upsert-increment via RETURNING, so concurrent calls can't both sneak under
+ * the cap. `allowed` is false once the incremented count exceeds `cap` — the
+ * caller must then skip the Workers AI call and show a "limit reached"
+ * message. Over-cap increments keep counting (harmless — no AI call is made
+ * for them, and the row doubles as a usage log for the operator).
+ */
+export async function consumeAiBudget(
+  db: D1Database,
+  tenantId: string,
+  cap: number,
+  now: number = Date.now(),
+): Promise<{ allowed: boolean; count: number }> {
+  const day = aiUsageDay(now);
+  const row = await db
+    .prepare(
+      "INSERT INTO ai_usage (tenant_id, day, count) VALUES (?, ?, 1) " +
+        "ON CONFLICT(tenant_id, day) DO UPDATE SET count = count + 1 " +
+        "RETURNING count",
+    )
+    .bind(tenantId, day)
+    .first<{ count: number }>();
+  const count = row?.count ?? 1;
+  return { allowed: count <= cap, count };
+}
+
 // ---- Audit log --------------------------------------------------------------
 
 export async function appendAudit(

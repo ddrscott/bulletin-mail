@@ -12,6 +12,11 @@ import type { Tenant } from "@bulletinmail/db";
 const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
+// Lucide "image" — hero-image action in the editor topbar. Inline SVG, no
+// icon font, no emoji (project rule).
+const LUCIDE_IMAGE_SVG =
+  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`;
+
 type SignInOpts = {
   tenant: Tenant;
   productName: string;
@@ -81,11 +86,21 @@ type EditorOpts = {
   slug: string;
   page: PageWithCurrentVersion | null;
   versions: VersionRow[];
+  /**
+   * Unsaved AI-generated draft (promote-to-wiki flow). Prefills the editor
+   * INSTEAD of the page content / default body — nothing is stored until
+   * the human clicks Save. Only meaningful when `page` is null.
+   */
+  draft?: { title: string; mdSource: string } | null;
+  /** One-shot notice rendered above the editor (e.g. "AI draft — review"). */
+  banner?: string | null;
+  /** Show the AI hero-image action (features.ai.wikiHeroImages + binding). */
+  heroEnabled?: boolean;
 };
 
-export function renderEditorPage({ tenant, productName, slug, page, versions }: EditorOpts): string {
-  const title = page?.title ?? deriveTitleFromSlug(slug);
-  const initialMd = page?.md_source ?? defaultBody(slug, title);
+export function renderEditorPage({ tenant, productName, slug, page, versions, draft, banner, heroEnabled }: EditorOpts): string {
+  const title = page?.title ?? draft?.title ?? deriveTitleFromSlug(slug);
+  const initialMd = page?.md_source ?? draft?.mdSource ?? defaultBody(slug, title);
   const initialVisibility = page?.visibility === "private" ? "private" : "public";
   // md_source is included so Preview can swap into the editor without an
   // extra round-trip. Capped at 50 most recent versions to keep payload sane.
@@ -190,9 +205,11 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
     <label for="vis-private" title="Only your team (admins + moderators) can read this page">Private</label>
   </div>
   <button id="history-btn" class="history-toggle" type="button" aria-expanded="false" aria-controls="versions-panel">History</button>
+  ${heroEnabled ? `<button id="hero-btn" class="history-toggle" type="button" title="Generate a hero image with AI and insert it at the top of the page">${LUCIDE_IMAGE_SVG} Hero image</button>` : ""}
   <a class="view" href="/wiki/${esc(slug)}">View</a>
   <button id="save-btn" class="btn btn--primary btn--small">Save</button>
 </div>
+${banner ? `<div class="banner banner--ok" style="border-radius:0;margin:0">${esc(banner)}</div>` : ""}
 <div id="status-msg" style="display:none"></div>
 <div id="preview-banner" class="preview-banner" style="display:none">
   <strong>Previewing version</strong>
@@ -366,6 +383,40 @@ export function renderEditorPage({ tenant, productName, slug, page, versions }: 
     }
   });
 
+  // AI hero image — only wired when the feature is enabled server-side
+  // (the button isn't rendered otherwise). Generates via Workers AI on the
+  // server, stores to R2, then inserts the image at the top of the draft.
+  // The image only becomes part of the page when the human saves.
+  const heroBtn = document.getElementById('hero-btn');
+  if (heroBtn) {
+    heroBtn.addEventListener('click', async () => {
+      if (previewing) return;
+      heroBtn.disabled = true;
+      const label = heroBtn.innerHTML;
+      heroBtn.textContent = 'Generating…';
+      try {
+        const title = document.getElementById('page-title').value.trim() || slug;
+        const res = await fetch('/api/wiki/' + encodeURIComponent(slug) + '/hero', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ title }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.message || ('hero generation failed: ' + res.status));
+        const md = getEditorMarkdown();
+        await setEditorMarkdown('![' + title.replace(/[\\[\\]]/g, '') + '](' + json.url + ')\\n\\n' + md);
+        workingMd = getEditorMarkdown();
+        showStatus('ok', 'Hero image inserted — save to keep it.');
+      } catch (err) {
+        showStatus('err', err.message);
+      } finally {
+        heroBtn.disabled = false;
+        heroBtn.innerHTML = label;
+      }
+    });
+  }
+
   function renderVersions(list) {
     const ul = document.getElementById('versions-list');
     if (!list.length) { ul.innerHTML = '<li class="ago">No history yet.</li>'; return; }
@@ -402,6 +453,29 @@ function defaultBody(slug: string, title: string): string {
 
 function deriveTitleFromSlug(slug: string): string {
   return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Minimal full-page notice (e.g. "AI limit reached", "generation failed")
+ * in the sign-in shell's chrome — used by flows that can't sensibly
+ * re-render the page they came from.
+ */
+export function renderNoticePage(opts: {
+  tenant: Tenant;
+  productName: string;
+  title: string;
+  message: string;
+  backHref: string;
+  backLabel: string;
+}): string {
+  return shell(opts.productName, opts.title, `
+    <header class="masthead">
+      <h1 class="wordmark">${esc(opts.tenant.display_name)}</h1>
+    </header>
+    <h2>${esc(opts.title)}</h2>
+    <div class="banner banner--alert">${esc(opts.message)}</div>
+    <p><a href="${esc(opts.backHref)}">${esc(opts.backLabel)}</a></p>
+  `);
 }
 
 function shell(productName: string, pageTitle: string, body: string): string {

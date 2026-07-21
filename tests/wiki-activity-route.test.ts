@@ -40,7 +40,11 @@ const baseConfig: InstanceConfig = {
   defaultMaxRecipientsPerGroup: 500,
   operator: { legalName: "Example Org", mailingAddress: "...", contactUrl: "..." },
   mailSubdomain: null,
-  features: { byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false, singleTenant: false },
+  ai: { dailyGenerationCap: 20, textModel: "@cf/test/text-model", imageModel: "@cf/test/image-model" },
+  features: {
+    byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false, singleTenant: false,
+    ai: { promoteToWiki: false, wikiAutogen: false, wikiHeroImages: false },
+  },
 };
 
 const TENANT_ROW = {

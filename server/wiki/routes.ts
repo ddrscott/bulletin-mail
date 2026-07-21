@@ -26,7 +26,23 @@
 
 import type { Hono, Context } from "hono";
 import { gravatarHash, newUlid, tryIndexWikiPage, type EmbeddingAi } from "@bulletinmail/shared";
-import { getAdminById, getAdminsByEmail, type Admin, type Tenant } from "@bulletinmail/db";
+import {
+  appendAudit,
+  consumeAiBudget,
+  getAdminById,
+  getAdminsByEmail,
+  type Admin,
+  type Tenant,
+} from "@bulletinmail/db";
+import {
+  aiLimitMessage,
+  AUTOGEN_SYSTEM_PROMPT,
+  buildAutogenPrompt,
+  buildHeroImagePrompt,
+  enabledAiFeatures,
+  generateImageBytes,
+  generateMarkdown,
+} from "../lib/ai.js";
 import type { AppVariables, Env } from "../types.js";
 import {
   buildTenantClearCookie,
@@ -38,7 +54,9 @@ import { safeReturnTo } from "../archive/routes.js";
 import { formatSixDigitCode, generateSixDigitCode } from "../lib/magic-link.js";
 import { compileMarkdown, slugify } from "./markdown.js";
 import {
+  deriveTitleFromSlug,
   renderEditorPage,
+  renderNoticePage,
   renderSignInPage,
   renderSignInSentPage,
 } from "./editor.js";
@@ -163,7 +181,116 @@ export function mountWikiRoutes(
       : [];
     return c.html(renderEditorPage({
       tenant, productName: c.var.config.productName, slug, page, versions,
+      heroEnabled: enabledAiFeatures(c.var.config, c.env.AI).wikiHeroImages,
     }));
+  }));
+
+  // ---- AI extras (feature-flagged, default off) ----------------------------
+  // Red-link autogen: an explicit POST from a signed-in editor on the
+  // empty-page placeholder. Never triggered by a bare GET — crawlers and
+  // link prefetchers must not consume the tenant's AI budget.
+  app.post("/wiki/:slug/generate", (c) => withTenantAdmin(c, async ({ tenant, admin }) => {
+    const slug = c.req.param("slug").toLowerCase();
+    if (!SLUG_RE.test(slug)) return c.text("not found", 404);
+    const features = enabledAiFeatures(c.var.config, c.env.AI);
+    if (!features.wikiAutogen) return c.text("not found", 404);
+    const ai = c.env.AI as AiBindingLike;
+
+    const stub = wikiStub(c, tenant);
+    const existing = await callDo<PageWithCurrentVersion | null>(stub, "getPage", { slug });
+    // Someone created it while the placeholder was open — never overwrite.
+    if (existing) return c.redirect(`/wiki/${slug}`, 303);
+
+    const cap = c.var.config.ai.dailyGenerationCap;
+    const budget = await consumeAiBudget(c.env.DB, tenant.id, cap);
+    if (!budget.allowed) {
+      return c.html(renderNoticePage({
+        tenant, productName: c.var.config.productName,
+        title: "AI limit reached",
+        message: aiLimitMessage(cap),
+        backHref: `/wiki/${slug}`, backLabel: "Back to the page",
+      }), 429);
+    }
+
+    const pages = await callDo<Array<{ title: string }>>(stub, "listPages", {});
+    const title = deriveTitleFromSlug(slug);
+    let md = await generateMarkdown(
+      ai,
+      c.var.config.ai.textModel,
+      AUTOGEN_SYSTEM_PROMPT,
+      buildAutogenPrompt(tenant.display_name, title, pages.map((p) => p.title)),
+    );
+    if (!md) {
+      return c.html(renderNoticePage({
+        tenant, productName: c.var.config.productName,
+        title: "Generation failed",
+        message: "The AI model did not return a usable draft. Nothing was saved — try again, or create the page by hand.",
+        backHref: `/wiki/${slug}`, backLabel: "Back to the page",
+      }), 502);
+    }
+
+    // Hero image, when that flag is ALSO on — a second budget unit. Failure
+    // (or an exhausted budget) degrades to a page without an image.
+    if (features.wikiHeroImages) {
+      const heroBudget = await consumeAiBudget(c.env.DB, tenant.id, cap);
+      if (heroBudget.allowed) {
+        const heroUrl = await generateAndStoreHeroImage(c, tenant, admin, title);
+        if (heroUrl) md = `![${title.replace(/[[\]]/g, "")}](${heroUrl})\n\n${md}`;
+      }
+    }
+
+    const htmlCompiled = compileMarkdown(md);
+    const saved = await callDo<{ pageId: string; versionId: string }>(stub, "savePage", {
+      slug, title,
+      mdSource: md, htmlCompiled,
+      authorAdminId: admin.id,
+      note: "AI-generated draft (red link) — review me",
+      visibility: "public",
+    } satisfies SavePageInput);
+    await writeR2Page(c, tenant.slug, slug, htmlCompiled, title, "public");
+
+    // Generated pages are indexed by unified search like any other page.
+    c.executionCtx.waitUntil(
+      tryIndexWikiPage(c.env.AI as unknown as EmbeddingAi | undefined, c.env.SEARCH_INDEX, {
+        tenantId: tenant.id, slug, title, mdSource: md,
+        visibility: "public", updatedAt: Date.now(),
+      }),
+    );
+    c.executionCtx.waitUntil(appendAudit(c.env.DB, {
+      tenantId: tenant.id,
+      actor: `admin:${admin.id}`,
+      action: "ai.wiki_autogen",
+      details: { slug, model: c.var.config.ai.textModel, versionId: saved.versionId },
+    }));
+
+    // Land on the rendered page — the Edit affordance is right there for
+    // review, and the revision note marks the version as AI-generated.
+    return c.redirect(`/wiki/${slug}`, 303);
+  }));
+
+  // Hero image for the editor: generate → R2 → return the URL. The image
+  // only becomes part of the page when the human saves the markdown that
+  // references it.
+  app.post("/api/wiki/:slug/hero", (c) => withTenantAdmin(c, async ({ tenant, admin }) => {
+    const slug = c.req.param("slug").toLowerCase();
+    if (!SLUG_RE.test(slug)) return c.json({ error: "invalid_slug" }, 400);
+    const features = enabledAiFeatures(c.var.config, c.env.AI);
+    if (!features.wikiHeroImages) return c.json({ error: "not_enabled" }, 404);
+
+    const body = await safeJson<{ title?: string }>(c.req.raw);
+    const title = (body?.title ?? "").trim().slice(0, 120) || deriveTitleFromSlug(slug);
+
+    const cap = c.var.config.ai.dailyGenerationCap;
+    const budget = await consumeAiBudget(c.env.DB, tenant.id, cap);
+    if (!budget.allowed) {
+      return c.json({ error: "limit_reached", message: aiLimitMessage(cap) }, 429);
+    }
+
+    const url = await generateAndStoreHeroImage(c, tenant, admin, title);
+    if (!url) {
+      return c.json({ error: "generation_failed", message: "Image generation failed. Try again." }, 502);
+    }
+    return c.json({ url });
   }));
 
   app.post("/api/wiki/:slug", (c) => withTenantAdmin(c, async ({ tenant, admin }) => {
@@ -360,6 +487,37 @@ function wikiStub(c: Ctx, tenant: Tenant): DurableObjectStub {
   return c.env.WIKI.get(id);
 }
 
+/**
+ * Generate a hero image via Workers AI and store it in the tenant's wiki
+ * image space in R2 (same key shape + serving route as uploaded images).
+ * Returns the /wiki/img/ URL, or null on model failure. Budget consumption
+ * is the CALLER's job — this helper only generates and stores.
+ */
+async function generateAndStoreHeroImage(
+  c: Ctx,
+  tenant: Tenant,
+  admin: Admin,
+  title: string,
+): Promise<string | null> {
+  const bytes = await generateImageBytes(
+    c.env.AI as AiBindingLike,
+    c.var.config.ai.imageModel,
+    buildHeroImagePrompt(tenant.display_name, title),
+  );
+  if (!bytes) return null;
+  const key = `${newUlid().toLowerCase()}.png`;
+  await c.env.WIKI_R2.put(`wiki/${tenant.slug}/img/${key}`, bytes, {
+    httpMetadata: { contentType: "image/png", cacheControl: "public, max-age=31536000, immutable" },
+  });
+  c.executionCtx.waitUntil(appendAudit(c.env.DB, {
+    tenantId: tenant.id,
+    actor: `admin:${admin.id}`,
+    action: "ai.wiki_hero_image",
+    details: { title, key, model: c.var.config.ai.imageModel },
+  }));
+  return `/wiki/img/${key}`;
+}
+
 async function callDo<T>(stub: DurableObjectStub, method: string, payload: unknown): Promise<T> {
   const res = await stub.fetch(`https://do.local/rpc/${method}`, {
     method: "POST",
@@ -421,7 +579,8 @@ async function renderWikiPage(
 
   const avatarUrl = admin ? await gravatarAvatarUrlFor(admin.email) : null;
   if (!body) {
-    return c.html(renderEmptyPagePlaceholder(tenant, c.var.config.productName, slug, admin, avatarUrl), 200);
+    const autogenEnabled = enabledAiFeatures(c.var.config, c.env.AI).wikiAutogen;
+    return c.html(renderEmptyPagePlaceholder(tenant, c.var.config.productName, slug, admin, avatarUrl, autogenEnabled), 200);
   }
   return c.html(renderWikiShell(tenant, c.var.config.productName, slug, title, body, admin, avatarUrl, visibility), 200);
 }
@@ -561,18 +720,31 @@ function renderWikiUserMenu(
 </details>`;
 }
 
+// Lucide "sparkles" — the AI-generate affordance on red-link placeholders.
+const LUCIDE_SPARKLES_SVG =
+  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>`;
+
 function renderEmptyPagePlaceholder(
   tenant: Tenant,
   productName: string,
   slug: string,
   admin: Admin | null,
   avatarUrl: string | null,
+  autogenEnabled = false,
 ): string {
   const esc = (s: string): string => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
   const editCta = admin
     ? `<p><a class="btn btn--primary" href="/wiki/${esc(slug)}/edit">Create this page →</a></p>`
     : `<p><a href="/auth/sign-in">Sign in as a moderator</a> to create this page.</p>`;
-  return renderWikiShell(tenant, productName, slug, slug, `<h1>${esc(slug)}</h1><p class="muted">This page doesn't exist yet.</p>${editCta}`, admin, avatarUrl);
+  // Red-link autogen: explicit POST, editors only, feature-flagged. The
+  // button never renders when the flag is off or Workers AI isn't bound.
+  const generateCta = admin && autogenEnabled
+    ? `<form method="post" action="/wiki/${esc(slug)}/generate" style="margin-top:var(--space-4)">
+        <button type="submit" class="btn">${LUCIDE_SPARKLES_SVG} Generate a draft with AI</button>
+        <p class="small muted">Writes a first draft in your wiki's voice, linking existing pages. Uses one unit of your organization's daily AI allowance — review and edit the result.</p>
+      </form>`
+    : "";
+  return renderWikiShell(tenant, productName, slug, slug, `<h1>${esc(slug)}</h1><p class="muted">This page doesn't exist yet.</p>${editCta}${generateCta}`, admin, avatarUrl);
 }
 
 async function safeJson<T>(req: Request): Promise<T | null> {

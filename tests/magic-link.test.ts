@@ -28,7 +28,11 @@ const config: InstanceConfig = {
   defaultMaxRecipientsPerGroup: 500,
   operator: { legalName: "Example Org", mailingAddress: "...", contactUrl: "..." },
   mailSubdomain: null,
-  features: { byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false, singleTenant: false },
+  ai: { dailyGenerationCap: 20, textModel: "@cf/test/text-model", imageModel: "@cf/test/image-model" },
+  features: {
+    byoDomainEnabled: false, publicArchivesAllowed: true, signupSelfService: false, singleTenant: false,
+    ai: { promoteToWiki: false, wikiAutogen: false, wikiHeroImages: false },
+  },
 };
 
 describe("generateMagicLinkToken", () => {
@@ -178,7 +182,7 @@ describe("verifyTurnstile", () => {
     const ok = await verifyTurnstile("s3cret", "bad-token", "1.2.3.4", fetcher as unknown as typeof fetch);
     expect(ok).toBe(false);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const [url, init] = fetcher.mock.calls[0]!;
+    const [url, init] = fetcher.mock.calls[0] as unknown as Parameters<typeof fetch>;
     expect(url).toBe("https://challenges.cloudflare.com/turnstile/v0/siteverify");
     expect(init).toMatchObject({ method: "POST" });
     const body = (init as RequestInit).body as string;

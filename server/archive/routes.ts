@@ -25,6 +25,7 @@ import type { Hono, Context } from "hono";
 import {
   buildMessageVectors,
   classifyHost,
+  newUlid,
   searchTenant,
   tryIndexMessage,
   tryIndexWikiPage,
@@ -33,6 +34,7 @@ import {
 } from "@bulletinmail/shared";
 import {
   appendAudit,
+  consumeAiBudget,
   consumeMagicLinkByCode,
   consumeMemberMagicLinkByCode,
   countRecentMessagesFromSender,
@@ -67,9 +69,20 @@ import {
   renderGroupIndexPage,
   renderThreadListPage,
   renderThreadPage,
+  senderLabel,
   type PostFormState,
   type RenderedMessage,
 } from "./render.js";
+import {
+  aiLimitMessage,
+  buildPromotePrompt,
+  enabledAiFeatures,
+  generateMarkdown,
+  PROMOTE_SYSTEM_PROMPT,
+  promoteSourceFooter,
+} from "../lib/ai.js";
+import type { AiBindingLike } from "../wiki/summary.js";
+import { slugify } from "../wiki/markdown.js";
 import { renderSearchPage, wikiMatchToItem, type SearchResultItem } from "./search.js";
 import {
   fanOutWebPost,
@@ -81,7 +94,7 @@ import {
   validateReplyInput,
 } from "./post.js";
 import { verifyTurnstile } from "../lib/turnstile.js";
-import { renderSignInSentPage } from "../wiki/editor.js";
+import { renderEditorPage, renderNoticePage, renderSignInSentPage } from "../wiki/editor.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -319,6 +332,81 @@ export function mountArchiveRoutes(
     });
   }));
 
+  // ---- promote a thread into a wiki page (AI, feature-flagged) ------------
+  // Admin/moderator only. The LLM drafts a page from the thread; the draft
+  // opens in the wiki editor for HUMAN review — nothing is saved until the
+  // reviewer clicks Save. 404 when the flag is off or Workers AI is absent.
+  app.post("/t/:threadId/promote", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
+    const features = enabledAiFeatures(c.var.config, c.env.AI);
+    if (!features.promoteToWiki) return c.text("not found", 404);
+    if (viewer.kind !== "admin") return c.text("forbidden", 403);
+
+    const threadId = c.req.param("threadId");
+    if (!THREAD_ID_RE.test(threadId)) return c.text("not found", 404);
+    const messages = await listMessagesByThread(c.env.DB, threadId);
+    if (messages.length === 0) return c.text("not found", 404);
+    const group = await getGroupById(c.env.DB, messages[0]!.group_id);
+    if (!group || group.tenant_id !== tenant.id) return c.text("not found", 404);
+    if (!canViewGroup(viewer, group)) return c.text("not found", 404);
+
+    // Daily guardrail — one unit per generation call, counted in D1.
+    const cap = c.var.config.ai.dailyGenerationCap;
+    const budget = await consumeAiBudget(c.env.DB, tenant.id, cap);
+    if (!budget.allowed) {
+      return c.html(renderNoticePage({
+        tenant, productName: c.var.config.productName,
+        title: "AI limit reached",
+        message: aiLimitMessage(cap),
+        backHref: `/t/${threadId}`, backLabel: "Back to the thread",
+      }), 429);
+    }
+
+    const subject = messages[0]!.subject || "(no subject)";
+    const md = await generateMarkdown(
+      c.env.AI as AiBindingLike,
+      c.var.config.ai.textModel,
+      PROMOTE_SYSTEM_PROMPT,
+      buildPromotePrompt(subject, messages.map((m) => ({
+        fromLabel: senderLabel(m.from_name, m.from_email),
+        receivedAt: m.received_at,
+        body: m.body_text ?? "(message had no plain-text body)",
+      }))),
+    );
+    if (!md) {
+      return c.html(renderNoticePage({
+        tenant, productName: c.var.config.productName,
+        title: "Generation failed",
+        message: "The AI model did not return a usable draft. Nothing was saved — try again in a moment.",
+        backHref: `/t/${threadId}`, backLabel: "Back to the thread",
+      }), 502);
+    }
+
+    // The draft always cites its source thread permalink; the footer is
+    // appended in code so the link is exact regardless of model behavior.
+    const draftMd = md + promoteSourceFooter(threadId, subject);
+    const slug = await pickFreeWikiSlug(c, tenant, slugify(subject));
+
+    c.executionCtx.waitUntil(appendAudit(c.env.DB, {
+      tenantId: tenant.id,
+      actor: `admin:${viewer.admin.id}`,
+      action: "ai.promote_to_wiki",
+      details: { threadId, slug, group: group.name, model: c.var.config.ai.textModel },
+    }));
+
+    // Render the wiki editor prefilled with the UNSAVED draft. The editor's
+    // Save posts to /api/wiki/<slug> with the reviewer as author.
+    return c.html(renderEditorPage({
+      tenant,
+      productName: c.var.config.productName,
+      slug,
+      page: null,
+      versions: [],
+      draft: { title: subject, mdSource: draftMd },
+      banner: "AI-generated draft from a mailing-list thread. Review and edit — nothing is published until you save.",
+      heroEnabled: features.wikiHeroImages,
+    }));
+  }));
+
   // ---- 6-digit code verify (HTML form on the sign-in "sent" page) ---------
   app.post("/auth/verify-code", async (c, next) => {
     const host = c.req.header("Host") ?? "";
@@ -435,6 +523,21 @@ async function backfillDoRpc<T>(
   });
   if (!res.ok) throw new Error(`DO rpc ${method} failed (${res.status})`);
   return (await res.json()) as T;
+}
+
+/**
+ * Find an unused wiki slug for a promoted thread: the subject's slug, then
+ * numbered suffixes, then a short random suffix as a last resort. Read-only
+ * probes against the tenant's wiki DO — nothing is created here.
+ */
+async function pickFreeWikiSlug(c: Ctx, tenant: Tenant, base: string): Promise<string> {
+  const stub = c.env.WIKI.get(c.env.WIKI.idFromName(tenant.slug));
+  const candidates = [base, ...Array.from({ length: 8 }, (_, i) => `${base}-${i + 2}`)];
+  for (const candidate of candidates) {
+    const page = await backfillDoRpc<unknown>(stub, "getPage", { slug: candidate });
+    if (page === null) return candidate;
+  }
+  return `${base}-${newUlid().toLowerCase().slice(-6)}`;
 }
 
 // ---- viewer resolution ------------------------------------------------------
@@ -578,6 +681,11 @@ async function showThread(
     });
   }
 
+  // Promote-to-wiki: admins/moderators only, and only when the feature flag
+  // is on AND Workers AI is bound (otherwise no button renders at all).
+  const canPromote =
+    viewer.kind === "admin" && enabledAiFeatures(c.var.config, c.env.AI).promoteToWiki;
+
   return c.html(
     renderThreadPage({
       tenant,
@@ -588,6 +696,7 @@ async function showThread(
       subject: messages[0]!.subject,
       messages: rendered,
       replyForm: await postFormStateFor(c, group, viewer, formOpts),
+      promoteUrl: canPromote ? `/t/${threadId}/promote` : null,
     }),
     formOpts.status ?? 200,
   );
