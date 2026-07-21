@@ -7,6 +7,8 @@
  *   GET  /archive/:group        thread list, newest activity first, paginated
  *   GET  /t/:threadId           thread permalink — messages in thread order
  *   GET  /archive/att/:id       attachment download (auth-checked, R2)
+ *   POST /archive/:group/new    start a new thread from the web (see post.ts)
+ *   POST /t/:threadId/reply     reply to a thread from the web (see post.ts)
  *   POST /auth/verify-code      6-digit code form (admin first, then member)
  *
  * Access model (task acceptance):
@@ -22,13 +24,17 @@
 import type { Hono, Context } from "hono";
 import { classifyHost } from "@bulletinmail/shared";
 import {
+  appendAudit,
   consumeMagicLinkByCode,
   consumeMemberMagicLinkByCode,
+  countRecentMessagesFromSender,
   countThreadsByGroup,
   getAttachmentWithMessage,
   getGroupById,
   getGroupByLocalpart,
+  getMemberByEmail,
   getTenantBySlug,
+  insertMessage,
   listAttachmentsByThread,
   listGroupsByTenant,
   listMessagesByThread,
@@ -36,6 +42,7 @@ import {
   type Admin,
   type Attachment,
   type Group,
+  type Message,
   type Tenant,
 } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
@@ -50,14 +57,26 @@ import {
   renderGroupIndexPage,
   renderThreadListPage,
   renderThreadPage,
+  type PostFormState,
   type RenderedMessage,
 } from "./render.js";
+import {
+  fanOutWebPost,
+  normalizeBody,
+  POST_RATE_LIMIT,
+  postPermissionFor,
+  replySubjectFor,
+  validateNewThreadInput,
+  validateReplyInput,
+} from "./post.js";
+import { verifyTurnstile } from "../lib/turnstile.js";
 import { renderSignInSentPage } from "../wiki/editor.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
 const PAGE_SIZE = 50;
 const GROUP_NAME_RE = /^[a-z][a-z0-9-]*[a-z0-9]$/;
+const THREAD_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const SIX_DIGIT_RE = /^\d{6}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -108,69 +127,85 @@ export function mountArchiveRoutes(
   }));
 
   // ---- thread list per group ----------------------------------------------
-  app.get("/archive/:group", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
+  app.get("/archive/:group", (c, next) => withViewer(c, next, ({ tenant, viewer }) =>
+    showThreadList(c, tenant, viewer, c.req.param("group").toLowerCase(), {
+      posted: c.req.query("posted") === "1",
+    })));
+
+  // ---- start a new thread from the web ------------------------------------
+  app.post("/archive/:group/new", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
     const groupLocal = c.req.param("group").toLowerCase();
     if (!GROUP_NAME_RE.test(groupLocal)) return c.text("not found", 404);
     const group = await getGroupByLocalpart(c.env.DB, tenant.id, groupLocal);
     if (!group || !canViewGroup(viewer, group)) return c.text("not found", 404);
 
-    const totalThreads = await countThreadsByGroup(c.env.DB, group.id);
-    const totalPages = Math.max(1, Math.ceil(totalThreads / PAGE_SIZE));
-    const page = clampPage(c.req.query("page"), totalPages);
-    const threads = await listThreadsByGroup(c.env.DB, group.id, {
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
-    });
+    const form = await c.req.formData();
+    const subject = String(form.get("subject") ?? "").trim();
+    const body = normalizeBody(String(form.get("body") ?? ""));
+    const turnstileToken = String(form.get("cf-turnstile-response") ?? "") || undefined;
 
-    return c.html(renderThreadListPage({
+    const outcome = await acceptWebPost(c, {
       tenant,
-      productName: c.var.config.productName,
-      viewerLabel: viewer.label,
+      viewer,
       group,
-      threads,
-      page,
-      totalPages,
-    }));
+      subject: subject || "(no subject)",
+      body,
+      parent: null,
+      turnstileToken,
+      inputErrors: validateNewThreadInput(subject, body),
+    });
+    // New thread: the message id IS the thread id (PRD §9.2 rule) — land on
+    // the fresh permalink.
+    if (outcome.ok) return c.redirect(`/t/${outcome.messageId}?posted=1`, 303);
+    return showThreadList(c, tenant, viewer, groupLocal, {
+      errors: outcome.errors,
+      draftSubject: subject,
+      draftBody: body,
+      status: outcome.status,
+    });
   }));
 
   // ---- thread view (stable permalink) -------------------------------------
-  app.get("/t/:threadId", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
-    const threadId = c.req.param("threadId");
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(threadId)) return c.text("not found", 404);
+  app.get("/t/:threadId", (c, next) => withViewer(c, next, ({ tenant, viewer }) =>
+    showThread(c, tenant, viewer, c.req.param("threadId"), {
+      posted: c.req.query("posted") === "1",
+    })));
 
+  // ---- reply to a thread from the web -------------------------------------
+  app.post("/t/:threadId/reply", (c, next) => withViewer(c, next, async ({ tenant, viewer }) => {
+    const threadId = c.req.param("threadId");
+    if (!THREAD_ID_RE.test(threadId)) return c.text("not found", 404);
     const messages = await listMessagesByThread(c.env.DB, threadId);
     if (messages.length === 0) return c.text("not found", 404);
     const group = await getGroupById(c.env.DB, messages[0]!.group_id);
     if (!group || group.tenant_id !== tenant.id) return c.text("not found", 404);
     if (!canViewGroup(viewer, group)) return c.text("not found", 404);
 
-    const allAtts = await listAttachmentsByThread(c.env.DB, threadId);
-    const attsByMessage = new Map<string, Attachment[]>();
-    for (const a of allAtts) {
-      const list = attsByMessage.get(a.message_id) ?? [];
-      list.push(a);
-      attsByMessage.set(a.message_id, list);
-    }
+    const form = await c.req.formData();
+    const body = normalizeBody(String(form.get("body") ?? ""));
+    const turnstileToken = String(form.get("cf-turnstile-response") ?? "") || undefined;
 
-    const rendered: RenderedMessage[] = [];
-    for (const m of messages) {
-      const atts = attsByMessage.get(m.id) ?? [];
-      rendered.push({
-        message: m,
-        bodyHtml: await renderBody(m.body_html, m.body_text, atts),
-        attachments: atts,
-      });
-    }
-
-    return c.html(renderThreadPage({
+    const outcome = await acceptWebPost(c, {
       tenant,
-      productName: c.var.config.productName,
-      viewerLabel: viewer.label,
+      viewer,
       group,
-      threadId,
-      subject: messages[0]!.subject,
-      messages: rendered,
-    }));
+      // Same subject a mail client would send on "Reply" — normalizeSubject
+      // in the outbound builder handles prefix/marker cleanup identically to
+      // a mailed reply.
+      subject: replySubjectFor(messages[0]!.subject),
+      body,
+      // Reply to the thread as displayed: parent = the latest message, so the
+      // References chain walks back through the whole conversation.
+      parent: messages[messages.length - 1]!,
+      turnstileToken,
+      inputErrors: validateReplyInput(body),
+    });
+    if (outcome.ok) return c.redirect(`/t/${threadId}?posted=1#m-${outcome.messageId}`, 303);
+    return showThread(c, tenant, viewer, threadId, {
+      errors: outcome.errors,
+      draftBody: body,
+      status: outcome.status,
+    });
   }));
 
   // ---- 6-digit code verify (HTML form on the sign-in "sent" page) ---------
@@ -278,6 +313,245 @@ async function withViewer(
     });
   }
   return c.text("unauthorized", 401);
+}
+
+// ---- pages (shared between GET and failed-POST re-render) -------------------
+
+type ThreadListFormOpts = {
+  posted?: boolean;
+  errors?: string[];
+  draftSubject?: string;
+  draftBody?: string;
+  status?: 400 | 403 | 429;
+};
+
+async function showThreadList(
+  c: Ctx,
+  tenant: Tenant,
+  viewer: ArchiveViewer,
+  groupLocal: string,
+  formOpts: ThreadListFormOpts = {},
+): Promise<Response> {
+  if (!GROUP_NAME_RE.test(groupLocal)) return c.text("not found", 404);
+  const group = await getGroupByLocalpart(c.env.DB, tenant.id, groupLocal);
+  if (!group || !canViewGroup(viewer, group)) return c.text("not found", 404);
+
+  const totalThreads = await countThreadsByGroup(c.env.DB, group.id);
+  const totalPages = Math.max(1, Math.ceil(totalThreads / PAGE_SIZE));
+  const page = clampPage(c.req.query("page"), totalPages);
+  const threads = await listThreadsByGroup(c.env.DB, group.id, {
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  });
+
+  return c.html(
+    renderThreadListPage({
+      tenant,
+      productName: c.var.config.productName,
+      viewerLabel: viewer.label,
+      group,
+      threads,
+      page,
+      totalPages,
+      newThreadForm: await postFormStateFor(c, group, viewer, formOpts),
+    }),
+    formOpts.status ?? 200,
+  );
+}
+
+type ThreadFormOpts = {
+  posted?: boolean;
+  errors?: string[];
+  draftBody?: string;
+  status?: 400 | 403 | 429;
+};
+
+async function showThread(
+  c: Ctx,
+  tenant: Tenant,
+  viewer: ArchiveViewer,
+  threadId: string,
+  formOpts: ThreadFormOpts = {},
+): Promise<Response> {
+  if (!THREAD_ID_RE.test(threadId)) return c.text("not found", 404);
+
+  const messages = await listMessagesByThread(c.env.DB, threadId);
+  if (messages.length === 0) return c.text("not found", 404);
+  const group = await getGroupById(c.env.DB, messages[0]!.group_id);
+  if (!group || group.tenant_id !== tenant.id) return c.text("not found", 404);
+  if (!canViewGroup(viewer, group)) return c.text("not found", 404);
+
+  const allAtts = await listAttachmentsByThread(c.env.DB, threadId);
+  const attsByMessage = new Map<string, Attachment[]>();
+  for (const a of allAtts) {
+    const list = attsByMessage.get(a.message_id) ?? [];
+    list.push(a);
+    attsByMessage.set(a.message_id, list);
+  }
+
+  const rendered: RenderedMessage[] = [];
+  for (const m of messages) {
+    const atts = attsByMessage.get(m.id) ?? [];
+    rendered.push({
+      message: m,
+      bodyHtml: await renderBody(m.body_html, m.body_text, atts),
+      attachments: atts,
+    });
+  }
+
+  return c.html(
+    renderThreadPage({
+      tenant,
+      productName: c.var.config.productName,
+      viewerLabel: viewer.label,
+      group,
+      threadId,
+      subject: messages[0]!.subject,
+      messages: rendered,
+      replyForm: await postFormStateFor(c, group, viewer, formOpts),
+    }),
+    formOpts.status ?? 200,
+  );
+}
+
+// ---- web posting ------------------------------------------------------------
+
+/**
+ * Form state for the viewer on this group, or null when they may not post
+ * (form hidden — the email path would bounce them at the SMTP boundary, the
+ * web path simply doesn't offer the box).
+ */
+async function postFormStateFor(
+  c: Ctx,
+  group: Group,
+  viewer: ArchiveViewer,
+  opts: { posted?: boolean; errors?: string[]; draftSubject?: string; draftBody?: string },
+): Promise<PostFormState | null> {
+  const posterEmail = viewer.kind === "admin" ? viewer.admin.email : viewer.email;
+  const membership = await getMemberByEmail(c.env.DB, group.id, posterEmail);
+  const perm = postPermissionFor(group, membership);
+  if (!perm.ok) return null;
+  const siteKey = typeof c.env.TURNSTILE_SITE_KEY === "string" && c.env.TURNSTILE_SITE_KEY
+    ? c.env.TURNSTILE_SITE_KEY
+    : null;
+  return {
+    turnstileSiteKey: siteKey,
+    posted: opts.posted,
+    errors: opts.errors,
+    draftSubject: opts.draftSubject,
+    draftBody: opts.draftBody,
+  };
+}
+
+type AcceptWebPostArgs = {
+  tenant: Tenant;
+  viewer: ArchiveViewer;
+  group: Group;
+  subject: string;
+  body: string;
+  /** Reply → the message being replied to; new thread → null. */
+  parent: Message | null;
+  turnstileToken: string | undefined;
+  inputErrors: string[];
+};
+
+type AcceptWebPostOutcome =
+  | { ok: true; messageId: string }
+  | { ok: false; errors: string[]; status: 400 | 403 | 429 };
+
+/**
+ * Validate and ingest a web post. On success the message row exists (visible
+ * in the archive immediately) and delivery fan-out is scheduled via
+ * waitUntil — the same pipeline shape as an emailed post (see post.ts).
+ */
+async function acceptWebPost(c: Ctx, args: AcceptWebPostArgs): Promise<AcceptWebPostOutcome> {
+  const posterEmail = args.viewer.kind === "admin" ? args.viewer.admin.email : args.viewer.email;
+
+  // Posting policy — identical rules (and reason strings) to the inbound
+  // Worker's envelope-sender validation.
+  const membership = await getMemberByEmail(c.env.DB, args.group.id, posterEmail);
+  const perm = postPermissionFor(args.group, membership);
+  if (!perm.ok) return { ok: false, errors: [perm.reason], status: 403 };
+
+  // Human check — env-gated exactly like admin sign-in (bypass when the
+  // Turnstile secret isn't configured; fail closed when it is).
+  const humanOk = await verifyTurnstile(
+    typeof c.env.TURNSTILE_SECRET_KEY === "string" ? c.env.TURNSTILE_SECRET_KEY : undefined,
+    args.turnstileToken,
+    c.req.header("CF-Connecting-IP"),
+  );
+  if (!humanOk) {
+    return {
+      ok: false,
+      errors: ["Human verification failed. Reload the page and try again."],
+      status: 403,
+    };
+  }
+
+  if (args.inputErrors.length > 0) return { ok: false, errors: args.inputErrors, status: 400 };
+
+  // Per-member rate limit — counts every message this human put into the
+  // tenant's lists recently, regardless of ingest path.
+  const recent = await countRecentMessagesFromSender(
+    c.env.DB,
+    args.tenant.id,
+    posterEmail,
+    Date.now() - POST_RATE_LIMIT.windowMs,
+  );
+  if (recent >= POST_RATE_LIMIT.max) {
+    return {
+      ok: false,
+      errors: ["You are posting too quickly. Wait a few minutes and try again."],
+      status: 429,
+    };
+  }
+
+  const fromName =
+    perm.member?.display_name?.trim() ||
+    (args.viewer.kind === "admin" ? args.viewer.admin.display_name : null) ||
+    null;
+
+  // Same row an emailed post gets from workers/inbound — original_message_id
+  // stays null (there is no sender Message-ID; emailed replies to this post
+  // thread back via deliveries.provider_message_id, resolveParent path 3).
+  const messageId = await insertMessage(c.env.DB, {
+    groupId: args.group.id,
+    originalMessageId: null,
+    inReplyToOutbound: args.parent?.id ?? null,
+    threadId: args.parent?.thread_id ?? null,
+    fromEmail: posterEmail,
+    fromName,
+    subject: args.subject,
+    bodyText: args.body,
+    bodyHtml: null,
+    hasAttachments: false,
+    status: "received",
+    receivedAt: Date.now(),
+  });
+
+  await appendAudit(c.env.DB, {
+    tenantId: args.tenant.id,
+    actor: `web:${posterEmail}`,
+    action: "webpost.accepted",
+    details: {
+      messageId,
+      group: args.group.name,
+      threadParent: args.parent?.id ?? null,
+    },
+  });
+
+  c.executionCtx.waitUntil(
+    fanOutWebPost({
+      db: c.env.DB,
+      email: c.env.EMAIL,
+      config: c.var.config,
+      tenant: args.tenant,
+      group: args.group,
+      messageId,
+    }),
+  );
+
+  return { ok: true, messageId };
 }
 
 export function canViewGroup(viewer: ArchiveViewer, group: Group): boolean {

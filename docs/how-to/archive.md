@@ -1,9 +1,9 @@
 ---
 title: "Browse the list archive"
-description: "Read past list traffic on the web — threads, messages, attachments — and control who can see what."
+description: "Read past list traffic on the web — threads, messages, attachments — post replies and new threads, and control who can see what."
 ---
 
-Every message delivered through a list is archived and browsable at your organization's subdomain. Members who joined late, deleted an email, or want to find "that thread about the fall festival" can read everything their lists have carried.
+Every message delivered through a list is archived and browsable at your organization's subdomain. Members who joined late, deleted an email, or want to find "that thread about the fall festival" can read everything their lists have carried. Members who prefer the web can also post from it — replies and new threads composed in the browser travel the same email pipeline as everything else.
 
 ## Where the archive lives
 
@@ -36,6 +36,24 @@ Group-level visibility follows the `archive_visibility` setting on each list (ad
 - **`members`** (default) — only active members of that list can read its archive.
 - **`public`** — any signed-in member of the *organization* can read it, even without being subscribed to that list. This is tenant-public, not internet-public.
 - **`none`** — the list is hidden from the archive for everyone, including admins.
+
+## Post from the web
+
+Signed-in members with posting permission see a **reply box** at the bottom of every thread and a **"Start a new thread" form** at the bottom of each list's thread page. A web post is not a separate content type: it is built into a normal list email (same From rewrite for DMARC alignment, same `In-Reply-To`/`References` threading, same subject-prefix handling, same `List-Unsubscribe` headers) and delivered to every member's inbox — email recipients and web readers see one conversation. The post appears in the archive immediately.
+
+Who gets the form follows the list's `posting_policy`, with exactly the same rules the email path enforces:
+
+- **`open`** — any signed-in viewer can post.
+- **`members`** (default) — active members of the list.
+- **`announce_only`** — only members with the moderator or authorized-sender role.
+- **`moderated`** — not yet supported (the email path bounces these too until the moderation queue ships); no form is shown.
+
+Notes and limits:
+
+- Plain text only for now — no attachments, no rich formatting. URLs are auto-linked when rendered.
+- **Rate limit:** at most 5 posts per 10 minutes per member (counting their emailed posts too).
+- **Human check:** when the operator has configured Cloudflare Turnstile (`TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`, same keys as admin sign-in), the post forms include the widget and posts without a valid token are refused.
+- Delivery fans out directly from the web Worker's email binding — no Queues involvement, so web posting works on the free tier in single-tenant mode.
 
 ## Message rendering and privacy
 

@@ -64,6 +64,40 @@ function absoluteTime(ts: number): string {
 const PAPERCLIP_SVG =
   `<svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Has attachments" role="img"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
 
+// Lucide "send" — submit buttons on the post forms.
+const SEND_SVG =
+  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></svg>`;
+
+/**
+ * State for the reply / new-thread forms. `null`/`undefined` on a page means
+ * "viewer may not post here" — the form isn't rendered at all (matching the
+ * email path, where the rejection happens at the SMTP boundary).
+ */
+export type PostFormState = {
+  /** When set, the Cloudflare Turnstile widget is embedded in the form. */
+  turnstileSiteKey: string | null;
+  /** Show the "your post was sent" confirmation banner (post-redirect GET). */
+  posted?: boolean | undefined;
+  /** Validation / permission errors to show above the form. */
+  errors?: string[] | undefined;
+  draftSubject?: string | undefined;
+  draftBody?: string | undefined;
+};
+
+/** Turnstile widget + loader script — only when a site key is configured. */
+function turnstileBlock(siteKey: string | null): string {
+  if (!siteKey) return "";
+  return `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><div class="cf-turnstile" data-sitekey="${esc(siteKey)}"></div>`;
+}
+
+function postBanners(form: PostFormState, postedText: string): string {
+  const posted = form.posted ? `<div class="banner ok">${esc(postedText)}</div>` : "";
+  const errors = form.errors && form.errors.length > 0
+    ? `<div class="banner err"><ul>${form.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul></div>`
+    : "";
+  return posted + errors;
+}
+
 type ShellOpts = {
   tenant: Tenant;
   productName: string;
@@ -126,6 +160,18 @@ function shell({ tenant, productName, title, crumbs, viewerLabel, body }: ShellO
   ul.att-list li { font-size: var(--text-sm); padding: 2px 0; }
   ul.att-list .att-size { color: var(--ink-muted); font-size: var(--text-xs); }
   .empty { color: var(--ink-muted); padding: var(--space-5) 0; }
+  .banner { padding: var(--space-3) var(--space-4); border-radius: 4px; margin: 0 0 var(--space-5); font-size: var(--text-sm); }
+  .banner.ok { border: 1px solid #166534; color: #166534; background: rgba(22, 101, 52, 0.07); }
+  .banner.err { border: 1px solid #b91c1c; color: #b91c1c; background: rgba(185, 28, 28, 0.07); }
+  .banner ul { margin: 0 0 0 1.1rem; padding: 0; }
+  section.postbox { margin-top: var(--space-7); padding-top: var(--space-5); border-top: var(--hairline); }
+  section.postbox h2 { font-size: var(--text-lg); margin: 0 0 var(--space-3); }
+  .postbox form { display: grid; gap: var(--space-3); }
+  .postbox input[type="text"], .postbox textarea { font: inherit; width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--rule); border-radius: 4px; background: transparent; color: var(--ink); }
+  .postbox textarea { resize: vertical; min-height: 8rem; }
+  .postbox button.primary { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); font: inherit; padding: var(--space-2) var(--space-4); border: 0; border-radius: 4px; background: var(--ink); color: var(--paper); cursor: pointer; }
+  .postbox button.primary:hover { opacity: 0.9; }
+  .postbox .form-note { font-size: var(--text-xs); color: var(--ink-muted); margin: 0; }
 </style>
 </head><body>
 <div class="app-shell">
@@ -183,6 +229,8 @@ export function renderThreadListPage(opts: {
   threads: ThreadSummary[];
   page: number;
   totalPages: number;
+  /** Render the "start a new thread" form. Omit when the viewer can't post. */
+  newThreadForm?: PostFormState | null;
 }): string {
   const items = opts.threads.length === 0
     ? `<li class="empty">No messages in this list yet.</li>`
@@ -203,6 +251,21 @@ export function renderThreadListPage(opts: {
     ? `<nav class="pager">${prev}<span>Page ${opts.page} of ${opts.totalPages}</span>${next}</nav>`
     : "";
 
+  const f = opts.newThreadForm;
+  const postBox = f
+    ? `<section class="postbox" id="new-thread">
+        <h2>Start a new thread</h2>
+        ${postBanners(f, "Your post was sent to the list.")}
+        <form method="post" action="/archive/${esc(opts.group.name)}/new">
+          <input type="text" name="subject" required maxlength="180" placeholder="Subject" value="${esc(f.draftSubject ?? "")}" aria-label="Subject">
+          <textarea name="body" rows="8" required maxlength="32000" placeholder="Write your message — plain text. It is emailed to every member of the list." aria-label="Message body">${esc(f.draftBody ?? "")}</textarea>
+          ${turnstileBlock(f.turnstileSiteKey)}
+          <button type="submit" class="primary">${SEND_SVG} Send to the list</button>
+          <p class="form-note">Your post is emailed to every member of ${esc(opts.group.display_name)} and appears here immediately.</p>
+        </form>
+      </section>`
+    : "";
+
   return shell({
     tenant: opts.tenant,
     productName: opts.productName,
@@ -212,7 +275,8 @@ export function renderThreadListPage(opts: {
     body: `<h1>${esc(opts.group.display_name)}</h1>
       ${opts.group.description ? `<p class="lede">${esc(opts.group.description)}</p>` : ""}
       <ul class="rowlist">${items}</ul>
-      ${pager}`,
+      ${pager}
+      ${postBox}`,
   });
 }
 
@@ -231,6 +295,8 @@ export function renderThreadPage(opts: {
   threadId: string;
   subject: string;
   messages: RenderedMessage[];
+  /** Render the reply form. Omit when the viewer can't post to this group. */
+  replyForm?: PostFormState | null;
 }): string {
   const articles = opts.messages.map(({ message: m, bodyHtml, attachments }) => {
     const atts = attachments.length === 0 ? "" : `<ul class="att-list">${attachments
@@ -246,6 +312,20 @@ export function renderThreadPage(opts: {
     </article>`;
   }).join("");
 
+  const f = opts.replyForm;
+  const postBox = f
+    ? `<section class="postbox" id="reply">
+        <h2>Reply to this thread</h2>
+        ${postBanners(f, "Your reply was sent to the list.")}
+        <form method="post" action="/t/${esc(opts.threadId)}/reply">
+          <textarea name="body" rows="8" required maxlength="32000" placeholder="Write your reply — plain text. It is emailed to every member of the list." aria-label="Reply body">${esc(f.draftBody ?? "")}</textarea>
+          ${turnstileBlock(f.turnstileSiteKey)}
+          <button type="submit" class="primary">${SEND_SVG} Send to the list</button>
+          <p class="form-note">Your reply is emailed to every member of ${esc(opts.group.display_name)} and threads with this conversation in their mail clients.</p>
+        </form>
+      </section>`
+    : "";
+
   return shell({
     tenant: opts.tenant,
     productName: opts.productName,
@@ -258,6 +338,7 @@ export function renderThreadPage(opts: {
     viewerLabel: opts.viewerLabel,
     body: `<h1>${esc(opts.subject || "(no subject)")}</h1>
       <p class="lede">${opts.messages.length} message${opts.messages.length === 1 ? "" : "s"} in ${esc(opts.group.display_name)}</p>
-      ${articles}`,
+      ${articles}
+      ${postBox}`,
   });
 }

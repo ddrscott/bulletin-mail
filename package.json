@@ -46,6 +46,7 @@
   "dependencies": {
     "@astrojs/starlight": "^0.30.0",
     "@bulletinmail/db": "workspace:*",
+    "@bulletinmail/mime": "workspace:*",
     "@bulletinmail/shared": "workspace:*",
     "astro": "^5.0.0",
     "hono": "^4.6.0",

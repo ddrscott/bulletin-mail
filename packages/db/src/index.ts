@@ -1520,6 +1520,28 @@ export async function listMemberGroupIds(
   return (results ?? []).map((r) => r.group_id);
 }
 
+/**
+ * How many messages this sender has put into the tenant's lists since `since`
+ * (Unix ms). Drives the web-post rate limit. Counts every ingest path (web
+ * and email) on purpose — the limit is on the human, not on the form.
+ */
+export async function countRecentMessagesFromSender(
+  db: D1Database,
+  tenantId: string,
+  fromEmail: string,
+  since: number,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM messages m
+       JOIN groups g ON g.id = m.group_id
+       WHERE g.tenant_id = ? AND m.from_email = ? AND m.received_at > ?`,
+    )
+    .bind(tenantId, fromEmail.toLowerCase(), since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 // ---- Member magic links (archive sign-in) -----------------------------------
 
 export async function createMemberMagicLink(
