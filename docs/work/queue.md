@@ -1,6 +1,6 @@
 # Work Queue
 
-- [-] [Fix broken Diátaxis section links on /docs/ — commit the local index.md rewrite + add new how-to pages](./fix-docs-index-links.md)
+- [x] [Fix broken Diátaxis section links on /docs/ — commit the local index.md rewrite + add new how-to pages](./fix-docs-index-links.md)
 - [x] [Community hub 1/5: Archive browser — read-only web view of list threads](./archive-browser.md)
 - [x] [Community hub 2/5: Web reply — post from the web into the list pipeline](./web-reply.md)
 - [~] ~~[Community hub 3/5: Wiki transplant — fold cf-wiki in, per-tenant, shared identity](./wiki-transplant.md)~~ (superseded: a native per-tenant wiki with shared magic-link identity already ships in `server/wiki/` since phase-2 commit 341e454 — CRUD, [[wiki links]], red links, revisions, R2 images all present; transplanting cf-wiki would replace working code. Remaining gap is only a wiki how-to doc — queue separately.)
