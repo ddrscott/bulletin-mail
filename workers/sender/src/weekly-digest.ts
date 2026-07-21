@@ -36,7 +36,7 @@ export const DIGEST_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Must match the weekly entry in wrangler.toml [triggers] EXACTLY — the
  *  scheduled handler compares event.cron against this string to dispatch. */
-export const WEEKLY_DIGEST_CRON = "0 23 * * 0";
+export const WEEKLY_DIGEST_CRON = "0 23 * * SUN";
 
 export interface WeeklyDigestEnv {
   DB: D1Database;
