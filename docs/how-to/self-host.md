@@ -169,26 +169,42 @@ This produces `workers/*/wrangler.generated.toml` with `[vars]` populated from y
 ## 9. Run database migrations
 
 ```sh
-pnpm db:migrate
-# Equivalent to:
-#   wrangler d1 execute bulletinmail --file packages/db/migrations/0001_init.sql
+pnpm db:migrate            # applies packages/db/migrations/*.sql to the remote DB
+pnpm db:status             # show applied / pending per migration
+pnpm db:migrate:local      # same, against the local dev DB (for `pnpm dev`)
 ```
+
+Requires `wrangler.generated.toml` from the previous step (that's where the real
+`database_id` lives). Applied migrations are recorded in a `schema_migrations`
+table, so `pnpm db:migrate` is safe to run any time — it only applies what's
+pending, in order, and re-running is a no-op.
+
+**Upgrading an instance that predates migration tracking?** Nothing to do:
+migrations whose tables/columns already exist are detected and recorded as
+`adopted` instead of failing. The first `pnpm db:migrate` on an old install
+baselines the tracking table automatically, then applies anything genuinely new.
 
 ---
 
 ## 10. Deploy the Workers
 
 ```sh
-pnpm --filter "@bulletinmail/*" deploy
+pnpm build && pnpm run deploy:all
 ```
 
-Or individually:
+`deploy:all` deploys in dependency order: **web first** (the sender's weekly
+digest reaches the wiki through a cross-script Durable Object binding to the
+web worker, so web must exist before sender deploys), then sender, then
+inbound. Or individually:
 
 ```sh
-pnpm --filter @bulletinmail/inbound deploy   # Email Routing handler
-pnpm --filter @bulletinmail/sender  deploy   # Queue consumer
-pnpm --filter @bulletinmail/web     deploy   # ALL HTTP — apex + admin + tenant subdomains
+pnpm run deploy           # web — ALL HTTP: apex + admin + tenant subdomains
+pnpm run deploy:sender    # queue consumer + digest crons (deploy web first)
+pnpm run deploy:inbound   # Email Routing handler
 ```
+
+(Use `pnpm run deploy`, not bare `pnpm deploy` — pnpm intercepts the bare word
+for its unrelated built-in workspace-deploy command.)
 
 The web worker's wildcard route (`*<your-apex>/*`) covers the apex AND every tenant subdomain in a single declaration — there is no per-tenant route to add when you create new tenants. Browser traffic to `https://firstpresby.<your-apex>/` reaches the web worker automatically.
 
@@ -278,9 +294,9 @@ See [`operations.md`](/how-to/operations/) for the operator runbook.
 git fetch origin
 git checkout v0.X.0
 pnpm install
-pnpm db:migrate        # if migrations are present
-pnpm render-wrangler --instance <your-apex>
-pnpm --filter "@bulletinmail/*" deploy
+pnpm render-wrangler --instance <your-apex>   # before db:migrate — it reads the generated config
+pnpm db:migrate                               # applies only what's pending; no-op if nothing new
+pnpm build && pnpm run deploy:all             # web → sender → inbound, in dependency order
 ```
 
 `CHANGELOG.md` calls out any breaking changes that require manual operator action.

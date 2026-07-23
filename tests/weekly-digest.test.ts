@@ -146,6 +146,10 @@ describe("renderWeeklyDigestEmail", () => {
 describe("cron constant", () => {
   it("is a Sunday-only weekly expression", () => {
     expect(WEEKLY_DIGEST_CRON.trim().split(/\s+/)).toHaveLength(5);
-    expect(WEEKLY_DIGEST_CRON.endsWith("0")).toBe(true);
+    // Cloudflare's cron parser rejects numeric 0 as day-of-week (its range is
+    // 1-7 / SUN-SAT) — the schedule upload fails with "invalid cron string"
+    // (code 10100). Pin the name form so a well-meaning revert to `* * 0`
+    // can't break the deploy again.
+    expect(WEEKLY_DIGEST_CRON.endsWith("SUN")).toBe(true);
   });
 });

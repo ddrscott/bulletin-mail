@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — tracked database migrations (`pnpm db:migrate` now exists)
+- **`scripts/db-migrate.ts`** — the script `package.json` and the self-host guide always referenced now exists. Applies `packages/db/migrations/*.sql` in order, exactly once, recording each in a new `schema_migrations` table (`name`, `applied_at`, `adopted`). Re-running is a no-op; `pnpm db:status` shows applied / adopted / pending; `pnpm db:migrate:local` targets the local dev DB; `--dry-run` previews.
+- **Smooth transition for existing installs:** deployments that ran migrations by hand (every install to date) are baselined automatically — all migrations in this repo are additive, so one that fails with "already exists"/"duplicate column name" is recorded as `adopted` and the run continues. Invariant for future migration authors: keep migrations additive (or use fresh object names) so the adopt heuristic stays sound.
+- **`pnpm run deploy:all`** deploys in dependency order (web → sender → inbound; sender's digest binds cross-script to the web worker's wiki DO). Fixed `deploy:inbound`/`deploy:sender` scripts, which invoked pnpm's unrelated built-in `deploy` command instead of the workspace script (`pnpm --filter X deploy` → `pnpm --filter X run deploy`).
+- **Docs:** self-host guide §9/§10 and "Updating to a new release" rewritten around the real commands (render-wrangler must precede `db:migrate` — the script reads `wrangler.generated.toml`); operations runbook gained an Upgrading section.
+
+### Fixed
+- **Weekly digest cron never registered:** Cloudflare's cron parser rejects `0` as day-of-week (its range is 1-7 / SUN-SAT), so the sender deploy failed schedule upload with "invalid cron string" (code 10100). Trigger and `WEEKLY_DIGEST_CRON` are now `0 23 * * SUN` (they must stay byte-identical for the scheduled dispatch).
+
 ### Added — Community hub 5/5: promote-to-wiki + LLM extras behind feature flags
 - **Three AI features, each behind its own flag, all default OFF.** New `features.ai.{promoteToWiki,wikiAutogen,wikiHeroImages}` in the instance config (schema, example, render-wrangler, `loadFromEnv` all wired). A flag alone is not enough — the web Worker must also carry the Workers AI binding; when absent the features **hide entirely** (no broken buttons) and zero AI calls are possible. `enabledAiFeatures()` in new `server/lib/ai.ts` folds both conditions.
 - **Promote to wiki** (`features.ai.promoteToWiki`): admins/moderators get a Lucide book-plus "Promote to wiki" button on archive thread pages → `POST /t/<thread-id>/promote` distills the thread via Workers AI into a draft wiki page (title from subject, code-appended footer citing the `/t/<thread-id>` permalink so the link is exact regardless of model behavior) and opens it in the wiki editor as an **unsaved draft — human review before anything is published, always**. Slug collisions resolved by probing the wiki DO (`-2`… suffixes, then a random tail).

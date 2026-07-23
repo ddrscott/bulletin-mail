@@ -31,8 +31,9 @@
 
     "deploy": "wrangler deploy --config wrangler.generated.toml",
     "deploy:single": "pnpm build:web:single && wrangler deploy --config wrangler.generated.toml",
-    "deploy:inbound": "pnpm --filter @bulletinmail/inbound deploy",
-    "deploy:sender": "pnpm --filter @bulletinmail/sender deploy",
+    "deploy:inbound": "pnpm --filter @bulletinmail/inbound run deploy",
+    "deploy:sender": "pnpm --filter @bulletinmail/sender run deploy",
+    "deploy:all": "pnpm run deploy && pnpm run deploy:sender && pnpm run deploy:inbound",
 
     "test": "vitest run --passWithNoTests && pnpm -r test",
     "typecheck": "astro check && tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p admin/tsconfig.json && pnpm -r typecheck",
@@ -40,6 +41,8 @@
 
     "render-wrangler": "tsx scripts/render-wrangler.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
+    "db:migrate:local": "tsx scripts/db-migrate.ts --local",
+    "db:status": "tsx scripts/db-migrate.ts --status",
     "cli": "pnpm --filter @bulletinmail/cli exec bulletin",
     "check-instance-leakage": "bash scripts/check-no-instance-leakage.sh"
   },
