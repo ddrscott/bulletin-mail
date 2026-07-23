@@ -1,3 +1,4 @@
+export * from "./code.js";
 export * from "./config.js";
 export * from "./gravatar.js";
 export * from "./host.js";

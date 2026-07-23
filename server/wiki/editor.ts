@@ -73,7 +73,13 @@ export function renderSignInSentPage(
     <form method="post" action="/auth/verify-code">
       ${returnToInput}
       <input type="hidden" name="email" value="${esc(email)}">
-      <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" placeholder="123456" required>
+      <!-- No maxlength: it would truncate a paste of the email's "123 456"
+           form (or one carrying leading whitespace) before the oninput
+           normalizer runs. Non-digits are stripped live, mirroring
+           normalizeSixDigitCode() in the verify handler. -->
+      <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+        pattern="\\d{6}" placeholder="123 456" required
+        oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
       <button type="submit" class="btn btn--primary">Verify code</button>
     </form>
     <p class="small muted">The link and code expire in 15 minutes.</p>

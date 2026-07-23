@@ -39,6 +39,7 @@ import {
 import {
   classifyHost,
   fetchGravatarDisplayName,
+  normalizeSixDigitCode,
   singleTenantSlug,
   systemAddress,
   type InstanceConfig,
@@ -237,7 +238,7 @@ async function siteRequest(c: Ctx): Promise<Response> {
 async function siteVerifyCode(c: Ctx): Promise<Response> {
   const body = await safeJson<{ email?: string; code?: string }>(c.req.raw);
   const email = body?.email?.trim().toLowerCase();
-  const code = body?.code?.replace(/\s/g, "");
+  const code = body?.code ? normalizeSixDigitCode(body.code) : undefined;
   if (!email || !validEmail(email)) return c.json({ error: "invalid_email" }, 400);
   if (!code || !SIX_DIGIT_RE.test(code)) return c.json({ error: "invalid_code" }, 400);
 
@@ -378,7 +379,7 @@ async function tenantVerifyCode(c: Ctx): Promise<Response> {
 
   const body = await safeJson<{ email?: string; code?: string }>(c.req.raw);
   const email = body?.email?.trim().toLowerCase();
-  const code = body?.code?.replace(/\s/g, "");
+  const code = body?.code ? normalizeSixDigitCode(body.code) : undefined;
   if (!email || !validEmail(email)) return c.json({ error: "invalid_email" }, 400);
   if (!code || !SIX_DIGIT_RE.test(code)) return c.json({ error: "invalid_code" }, 400);
 

@@ -282,10 +282,19 @@ function renderCodeForm(opts: {
     inputmode: "numeric",
     autocomplete: "one-time-code",
     pattern: "\\d{6}",
-    maxlength: "7", // allows "123 456"
+    // No maxlength: it truncates BEFORE the input event fires, so a paste of
+    // the email's "123 456" (or one carrying the plain-text body's leading
+    // indent) would lose digits. Normalization below enforces the length.
     required: "required",
     placeholder: "123 456",
     "aria-label": "6-digit sign-in code",
+    // Strip spaces/dashes/anything non-digit as it arrives — the email
+    // formats the code as "123 456", so every copy/paste carries the space,
+    // and the native pattern check would otherwise reject the raw value at
+    // submit without this. Mirrors normalizeSixDigitCode() server-side.
+    oninput: () => {
+      codeInput.value = codeInput.value.replace(/\D/g, "").slice(0, 6);
+    },
   }) as HTMLInputElement;
   const submit = h("button", { class: "btn btn--primary", type: "submit" }, "Sign in") as HTMLButtonElement;
   let resending = false;
@@ -320,7 +329,7 @@ function renderCodeForm(opts: {
   const form = h("form", {
     onsubmit: async (ev) => {
       ev.preventDefault();
-      const code = codeInput.value.replace(/\s/g, "");
+      const code = codeInput.value.replace(/\D/g, "");
       if (!/^\d{6}$/.test(code)) {
         opts.onBanner({ kind: "error", text: "Enter the 6-digit code from the email." });
         return;

@@ -26,6 +26,7 @@ import {
   buildMessageVectors,
   classifyHost,
   newUlid,
+  normalizeSixDigitCode,
   searchTenant,
   tryIndexMessage,
   tryIndexWikiPage,
@@ -417,7 +418,7 @@ export function mountArchiveRoutes(
 
     const form = await c.req.formData();
     const email = String(form.get("email") ?? "").trim().toLowerCase();
-    const code = String(form.get("code") ?? "").replace(/\s/g, "");
+    const code = normalizeSixDigitCode(String(form.get("code") ?? ""));
     const returnTo = safeReturnTo(String(form.get("return_to") ?? ""));
 
     const invalid = (): Response => c.html(

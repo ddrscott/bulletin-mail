@@ -7,7 +7,7 @@ import {
   renderMagicLinkEmail,
 } from "../server/lib/magic-link.js";
 import { verifyTurnstile } from "../server/lib/turnstile.js";
-import type { InstanceConfig } from "@bulletinmail/shared";
+import { normalizeSixDigitCode, type InstanceConfig } from "@bulletinmail/shared";
 
 const config: InstanceConfig = {
   apexDomain: "example.org",
@@ -95,6 +95,34 @@ describe("formatSixDigitCode", () => {
   it("leaves non-6-digit input untouched", () => {
     expect(formatSixDigitCode("12345")).toBe("12345");
     expect(formatSixDigitCode("12 34 56")).toBe("12 34 56");
+  });
+});
+
+describe("normalizeSixDigitCode", () => {
+  it("round-trips the email's own formatting", () => {
+    // The email renders formatSixDigitCode's "123 456" — a straight
+    // copy/paste of what we sent must always normalize back.
+    expect(normalizeSixDigitCode(formatSixDigitCode("123456"))).toBe("123456");
+  });
+
+  it("strips the plain-text body's leading indent", () => {
+    // The text email indents the code with four spaces; sloppy selection
+    // grabs them too.
+    expect(normalizeSixDigitCode("    123 456")).toBe("123456");
+    expect(normalizeSixDigitCode("123 456\n")).toBe("123456");
+  });
+
+  it("strips dashes and unicode spaces", () => {
+    expect(normalizeSixDigitCode("123-456")).toBe("123456");
+    expect(normalizeSixDigitCode("123 456")).toBe("123456"); // NBSP from HTML email copy
+    expect(normalizeSixDigitCode("1 2 3 4 5 6")).toBe("123456");
+  });
+
+  it("does not fabricate validity", () => {
+    // Callers still validate /^\d{6}$/ on the result.
+    expect(normalizeSixDigitCode("12 345")).toBe("12345");
+    expect(normalizeSixDigitCode("your code is 123 456!")).toBe("123456");
+    expect(normalizeSixDigitCode("")).toBe("");
   });
 });
 
