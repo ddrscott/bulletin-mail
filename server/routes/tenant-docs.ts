@@ -8,18 +8,19 @@
  * tenant's real URLs filled in. Deep /docs/* links on tenant hosts 301 to
  * the canonical apex docs.
  *
+ * Rendered in the shared archive/wiki shell so the page reads as part of the
+ * tenant site (masthead, dateline, /admin/styles.css tokens), not a separate
+ * product.
+ *
  * Single-tenant mode: the apex IS the tenant and the operator still needs
  * the full docs at /docs, so the intercept disables itself entirely.
- *
- * Like /join, this is server-rendered HTML — link-shareable, no JS, fast on
- * a phone.
  */
 
 import type { Hono, Context } from "hono";
 import { classifyHost, type InstanceConfig } from "@bulletinmail/shared";
 import { getTenantBySlug, type Tenant } from "@bulletinmail/db";
 import type { AppVariables, Env } from "../types.js";
-import { shellHtml } from "./tenant.js";
+import { shell } from "../archive/render.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -40,10 +41,7 @@ export function mountTenantDocs(app: Hono<{ Bindings: Env; Variables: AppVariabl
 
     const tenant = await getTenantBySlug(c.env.DB, result.slug);
     if (!tenant || tenant.status !== "active") {
-      return c.html(shellHtml(config, "Not found", `
-        <h1>Not found</h1>
-        <p>There's no active organization at this address.</p>
-      `), 404);
+      return c.text("Not found", 404);
     }
     return c.html(docsPage(config, tenant, host), 200);
   };
@@ -58,14 +56,15 @@ const esc = (s: string): string =>
   s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 const DOCS_CSS = `
-  h2 { font-size: 1.15rem; margin: 2.25rem 0 0.5rem; }
-  ol, ul { padding-left: 1.25rem; }
-  li { margin: 0.35rem 0; }
-  code { font-size: 0.9em; background: color-mix(in srgb, currentColor 8%, transparent); padding: 0.1em 0.35em; border-radius: 3px; }
-  .quicklinks { border: 1px solid var(--line); border-radius: 4px; padding: 0.9rem 1rem; margin: 1.25rem 0 0; }
-  .quicklinks ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
-  a { color: inherit; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 2.25rem 0 1rem; }
+  main.archive-main h2 { font: 600 var(--text-base) var(--font-sans); margin: var(--space-7) 0 var(--space-2); text-transform: uppercase; letter-spacing: 0.05em; font-size: var(--text-sm); }
+  main.archive-main ol, main.archive-main ul { margin: 0; padding-left: 1.25rem; }
+  main.archive-main li { margin: var(--space-2) 0; }
+  main.archive-main code { font-family: var(--font-mono); font-size: 0.85em; }
+  main.archive-main a code { color: inherit; }
+  ul.quicklinks { list-style: none; padding: 0; margin: 0 0 var(--space-2); border-top: var(--hairline); }
+  ul.quicklinks li { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: baseline; padding: var(--space-3) 0; margin: 0; border-bottom: var(--hairline); }
+  ul.quicklinks .ql-label { font: var(--text-xs)/1.4 var(--font-mono); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; min-width: 9rem; }
+  .docs-note { font-size: var(--text-sm); color: var(--ink-muted); margin: var(--space-2) 0 0; }
 `;
 
 function docsPage(config: InstanceConfig, tenant: Tenant, host: string): string {
@@ -73,34 +72,29 @@ function docsPage(config: InstanceConfig, tenant: Tenant, host: string): string 
   const apex = esc(config.apexDomain);
   const name = esc(tenant.display_name);
 
-  return shellHtml(config, `${tenant.display_name} — Mailing-list docs`, `
-    <header>
-      <p class="kicker">${name}</p>
-      <h1>Mailing-list docs</h1>
-      <p class="lede">How to run and use the mailing lists at <code>${h}</code>.</p>
-    </header>
+  const body = `
+    <h1>Docs</h1>
+    <p class="lede">How to run and use the mailing lists at ${name}.</p>
 
-    <div class="quicklinks">
-      <ul>
-        <li>Admin console — <a href="https://${h}/admin"><code>https://${h}/admin</code></a></li>
-        <li>Message archive — <a href="https://${h}/archive"><code>https://${h}/archive</code></a></li>
-        <li>Home page &amp; wiki — <a href="https://${h}/"><code>https://${h}/</code></a></li>
-      </ul>
-    </div>
+    <ul class="quicklinks">
+      <li><span class="ql-label">Admin console</span> <a href="https://${h}/admin"><code>${h}/admin</code></a></li>
+      <li><span class="ql-label">Message archive</span> <a href="https://${h}/archive"><code>${h}/archive</code></a></li>
+      <li><span class="ql-label">Home &amp; wiki</span> <a href="https://${h}/"><code>${h}/</code></a></li>
+    </ul>
 
     <h2>Start a list</h2>
     <ol>
-      <li>Go to <a href="https://${h}/admin"><code>https://${h}/admin</code></a> and sign in — enter your email, then the 6-digit code we send you. (You must be on the team; an existing admin can invite you.)</li>
+      <li>Open the <a href="https://${h}/admin">admin console</a> and sign in — enter your email, then the 6-digit code we send you. (You must be on the team; an existing admin can invite you.)</li>
       <li>Click <strong>New group</strong>. The list name becomes its email address: <code>announcements</code> → <code>announcements@${h}</code>.</li>
       <li>Pick who can post — members, anyone, moderated, or announce-only. You can change this later.</li>
     </ol>
-    <p>The list address works immediately.</p>
+    <p class="docs-note">The list address works immediately.</p>
 
     <h2>Add people</h2>
     <ul>
-      <li><strong>One at a time:</strong> open the group's <strong>Members</strong> tab and add their email. They get a confirmation email first and receive no list mail until they accept.</li>
-      <li><strong>A whole spreadsheet:</strong> use <strong>Bulk import</strong> on the same tab — paste addresses (one per line, or <code>Name &lt;email&gt;</code>), preview, then add all.</li>
-      <li><strong>Let people join themselves:</strong> share <code>https://${h}/join/&lt;list-name&gt;</code> — the exact link is shown on the group's <strong>Pending</strong> tab. Requests wait there for your approval; approved people start receiving mail right away.</li>
+      <li><strong>One at a time</strong> — open the group's <strong>Members</strong> tab and add their email. They get a confirmation email first and receive no list mail until they accept.</li>
+      <li><strong>A whole spreadsheet</strong> — use <strong>Bulk import</strong> on the same tab: paste addresses (one per line, or <code>Name &lt;email&gt;</code>), preview, then add all.</li>
+      <li><strong>Let people join themselves</strong> — share <code>https://${h}/join/&lt;list-name&gt;</code>; the exact link is shown on the group's <strong>Pending</strong> tab. Requests wait there for your approval; approved people start receiving mail right away.</li>
     </ul>
 
     <h2>Invite helpers</h2>
@@ -113,10 +107,19 @@ function docsPage(config: InstanceConfig, tenant: Tenant, host: string): string 
     <ul>
       <li><strong>Join</strong> with a link from ${name}, like <code>https://${h}/join/&lt;list-name&gt;</code>.</li>
       <li><strong>Unsubscribe</strong> any time with the link in the footer of every message.</li>
-      <li><strong>Catch up</strong> on past messages at <a href="https://${h}/archive"><code>https://${h}/archive</code></a> — sign in with your email and a 6-digit code.</li>
+      <li><strong>Catch up</strong> on past messages in the <a href="https://${h}/archive">archive</a> — sign in with your email and a 6-digit code.</li>
     </ul>
 
-    <hr>
-    <p class="small muted">Want more detail? The full admin guide is at <a href="https://${apex}/docs/how-to/tenant-admin/">${apex}/docs/how-to/tenant-admin/</a> and the archive guide at <a href="https://${apex}/docs/how-to/archive/">${apex}/docs/how-to/archive/</a>. Platform docs (self-hosting, operations) live at <a href="https://${apex}/docs/">${apex}/docs/</a>.</p>
-  `, DOCS_CSS);
+    <p class="docs-note">Want more detail? See the full <a href="https://${apex}/docs/how-to/tenant-admin/">admin guide</a> and <a href="https://${apex}/docs/how-to/archive/">archive guide</a>. Platform documentation lives at <a href="https://${apex}/docs/">${apex}/docs</a>.</p>
+  `;
+
+  return shell({
+    tenant,
+    productName: config.productName,
+    title: "Docs",
+    crumbs: [{ label: "Docs" }],
+    viewerLabel: null,
+    body,
+    extraCss: DOCS_CSS,
+  });
 }

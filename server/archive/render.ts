@@ -110,10 +110,12 @@ export type ShellOpts = {
   crumbs: Array<{ label: string; href?: string }>;
   viewerLabel: string | null;
   body: string;
+  /** Page-specific CSS appended to the shell's style block. */
+  extraCss?: string;
 };
 
-/** Shared archive page chrome — also used by the /search page. */
-export function shell({ tenant, productName, title, crumbs, viewerLabel, body }: ShellOpts): string {
+/** Shared archive page chrome — also used by /search and the tenant /docs page. */
+export function shell({ tenant, productName, title, crumbs, viewerLabel, body, extraCss = "" }: ShellOpts): string {
   const crumbHtml = crumbs
     .map((cr, i) =>
       i === crumbs.length - 1 || !cr.href
@@ -177,7 +179,7 @@ export function shell({ tenant, productName, title, crumbs, viewerLabel, body }:
   .postbox button.primary { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); font: inherit; padding: var(--space-2) var(--space-4); border: 0; border-radius: 4px; background: var(--ink); color: var(--paper); cursor: pointer; }
   .postbox button.primary:hover { opacity: 0.9; }
   .postbox .form-note { font-size: var(--text-xs); color: var(--ink-muted); margin: 0; }
-</style>
+${extraCss}</style>
 </head><body>
 <div class="app-shell">
   <header class="masthead masthead--tenant">

@@ -320,7 +320,7 @@ function notFoundPage(config: InstanceConfig): string {
   `);
 }
 
-export function shellHtml(_config: InstanceConfig, title: string, body: string, extraCss = ""): string {
+function shellHtml(_config: InstanceConfig, title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -361,7 +361,7 @@ export function shellHtml(_config: InstanceConfig, title: string, body: string, 
   .banner.err ul { margin: 0.3rem 0 0 1.1rem; padding: 0; }
   /* Honeypot: hide off-screen, NOT display:none (some bots check that). */
   .honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-${extraCss}</style>
+</style>
 </head>
 <body>
 <main>${body}</main>
