@@ -20,6 +20,7 @@ Recipes for specific tasks.
 - **[Self-host your own instance](/docs/how-to/self-host/)** — Deploy BulletinMail to your own Cloudflare account in ~90 minutes.
 - **[Install BulletinMail with an LLM](/docs/how-to/install-with-llm/)** — Hand this guide to ChatGPT, Claude, or another shell-capable LLM agent. Given a Cloudflare account and a domain, the agent can bring up a single-tenant BulletinMail deployment end-to-end.
 - **[Day-2 operations](/docs/how-to/operations/)** — Routine ops, incident triage, capacity, decommissioning a tenant.
+- **[Administer your tenant](/docs/how-to/tenant-admin/)** — Sign in to the tenant admin, create lists, add members, approve subscribe requests, and manage your team.
 - **[Browse the list archive](/docs/how-to/archive/)** — Read past list traffic on the web — threads, messages, attachments — and post replies from the browser.
 - **[Enable AI features](/docs/how-to/ai-features/)** — Turn on promote-to-wiki, red-link page generation, and wiki hero images — each behind its own feature flag, off by default.
 
