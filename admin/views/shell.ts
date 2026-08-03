@@ -36,6 +36,8 @@ export function renderShell(root: HTMLElement, me: TenantMe, _active: "home" | "
       h("a", { href: "#/team" }, "Team"),
       h("span", { class: "sep" }, "·"),
       h("a", { href: "/" }, "Wiki"),
+      h("span", { class: "sep" }, "·"),
+      h("a", { href: "/docs" }, "Docs"),
     ),
   );
 

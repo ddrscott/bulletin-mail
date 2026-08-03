@@ -30,6 +30,7 @@ import {
 import type { AppVariables, Env } from "../types.js";
 import { mountWikiRoutes } from "../wiki/routes.js";
 import { mountArchiveRoutes } from "../archive/routes.js";
+import { mountTenantDocs } from "./tenant-docs.js";
 
 type Ctx = Context<{ Bindings: Env; Variables: AppVariables }>;
 
@@ -44,6 +45,10 @@ export function mountTenant(app: Hono<{ Bindings: Env; Variables: AppVariables }
   // Archive browser (/archive, /archive/:group, /t/:threadId, attachment
   // downloads, POST /auth/verify-code). Also before the catch-all.
   mountArchiveRoutes(app);
+
+  // Tenant-facing docs at /docs — intercepts the ASSETS fallthrough, which
+  // would otherwise serve the operator-oriented Starlight tree on this host.
+  mountTenantDocs(app);
 
   // Tenant admin SPA at /admin/* — explicit ASSETS fallthrough. The tenant
   // catch-all below would otherwise eat /admin/styles.css, /admin/main.js,
@@ -315,7 +320,7 @@ function notFoundPage(config: InstanceConfig): string {
   `);
 }
 
-function shellHtml(_config: InstanceConfig, title: string, body: string): string {
+export function shellHtml(_config: InstanceConfig, title: string, body: string, extraCss = ""): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -356,7 +361,7 @@ function shellHtml(_config: InstanceConfig, title: string, body: string): string
   .banner.err ul { margin: 0.3rem 0 0 1.1rem; padding: 0; }
   /* Honeypot: hide off-screen, NOT display:none (some bots check that). */
   .honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-</style>
+${extraCss}</style>
 </head>
 <body>
 <main>${body}</main>
