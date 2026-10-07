@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Turnstile human check on the apex `/contact` form
+- **`/contact` was the one public form with no bot protection**, and it relays straight to the operator's Discord webhook. It now uses the same env-gated `TURNSTILE_SITE_KEY`/`TURNSTILE_SECRET_KEY` pattern as admin sign-in and the archive post forms: widget embedded when a site key is set, `POST /contact` verified against siteverify before field validation and before anything reaches Discord. A missing or refused token re-renders the form with the draft intact (403). Unconfigured instances are unchanged — no script tag, check bypassed.
+- **Tests:** new `tests/contact.test.ts` — widget present/absent, missing token, refused token, accepted token, human-check-before-fields, dev bypass; asserts the webhook is never called on a failed check.
+
 ### Added — tracked database migrations (`pnpm db:migrate` now exists)
 - **`scripts/db-migrate.ts`** — the script `package.json` and the self-host guide always referenced now exists. Applies `packages/db/migrations/*.sql` in order, exactly once, recording each in a new `schema_migrations` table (`name`, `applied_at`, `adopted`). Re-running is a no-op; `pnpm db:status` shows applied / adopted / pending; `pnpm db:migrate:local` targets the local dev DB; `--dry-run` previews.
 - **Smooth transition for existing installs:** deployments that ran migrations by hand (every install to date) are baselined automatically — all migrations in this repo are additive, so one that fails with "already exists"/"duplicate column name" is recorded as `adopted` and the run continues. Invariant for future migration authors: keep migrations additive (or use fresh object names) so the adopt heuristic stays sound.

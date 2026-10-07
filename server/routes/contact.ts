@@ -2,11 +2,17 @@
  * Contact page — apex-only marketing intake.
  *
  *   GET  /contact   form (name, email, reason, message)
- *   POST /contact   validate → forward to env.DISCORD_WEBHOOK → success page
+ *   POST /contact   human check → validate → forward to env.DISCORD_WEBHOOK
+ *                   → success page
  *
- * Pattern mirrors /c/ and /u/: server-rendered HTML, inline CSS, no JS.
- * Posts back to itself; success and validation errors are server-rendered
- * inline so the page works without JavaScript.
+ * Pattern mirrors /c/ and /u/: server-rendered HTML, inline CSS. Posts back
+ * to itself; success and validation errors are server-rendered inline.
+ *
+ * Bot protection is Cloudflare Turnstile, env-gated exactly like admin
+ * sign-in and the archive post forms (see server/lib/turnstile.ts): with
+ * TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY set, the widget is embedded and
+ * a POST without a valid token is rejected before anything reaches Discord.
+ * With them unset the page stays JS-free and the check is bypassed (dev).
  *
  * The instance config's `operator.contactUrl` points at this path
  * (`/contact` by convention). Forks that prefer a different contact channel
@@ -15,6 +21,7 @@
 
 import type { Hono } from "hono";
 import { systemAddress } from "@bulletinmail/shared";
+import { verifyTurnstile } from "../lib/turnstile.js";
 import type { AppVariables, Env } from "../types.js";
 
 const escapeHtml = (s: string): string =>
@@ -33,11 +40,16 @@ const isReason = (v: string): v is ReasonValue =>
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const HUMAN_CHECK_FAILED = "Human verification failed. Complete the check below and send again.";
+
+const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v ? v : undefined;
+
 export function mountContact(
   app: Hono<{ Bindings: Env; Variables: AppVariables }>,
 ): void {
   app.get("/contact", (c) =>
-    c.html(formPage(c.var.config.productName, null, {})),
+    c.html(formPage(c.var.config.productName, null, {}, str(c.env.TURNSTILE_SITE_KEY))),
   );
 
   app.post("/contact", async (c) => {
@@ -46,6 +58,27 @@ export function mountContact(
     const email = (form.get("email") ?? "").toString().trim();
     const reasonRaw = (form.get("reason") ?? "").toString().trim();
     const message = (form.get("message") ?? "").toString().trim();
+    const siteKey = str(c.env.TURNSTILE_SITE_KEY);
+
+    // Human check first — a bot doesn't get field-level feedback, and
+    // nothing unverified reaches the Discord webhook.
+    const humanOk = await verifyTurnstile(
+      str(c.env.TURNSTILE_SECRET_KEY),
+      str(form.get("cf-turnstile-response")),
+      c.req.header("CF-Connecting-IP"),
+    );
+    if (!humanOk) {
+      return c.html(
+        formPage(
+          c.var.config.productName,
+          {},
+          { name, email, reason: reasonRaw, message },
+          siteKey,
+          HUMAN_CHECK_FAILED,
+        ),
+        403,
+      );
+    }
 
     const fieldErrors: Record<string, string> = {};
     if (!EMAIL_RE.test(email)) fieldErrors.email = "Enter a valid email address.";
@@ -56,7 +89,7 @@ export function mountContact(
 
     if (Object.keys(fieldErrors).length > 0) {
       return c.html(
-        formPage(c.var.config.productName, fieldErrors, { name, email, reason: reasonRaw, message }),
+        formPage(c.var.config.productName, fieldErrors, { name, email, reason: reasonRaw, message }, siteKey),
         400,
       );
     }
@@ -103,6 +136,8 @@ function formPage(
   productName: string,
   errors: Record<string, string> | null,
   values: { name?: string; email?: string; reason?: string; message?: string },
+  turnstileSiteKey?: string,
+  bannerText = "Couldn't send — fix the highlighted fields below.",
 ): string {
   const v = {
     name: escapeHtml(values.name ?? ""),
@@ -115,7 +150,12 @@ function formPage(
       ? `<p class="err">${escapeHtml(errors[field])}</p>`
       : "";
   const banner = errors
-    ? `<p class="banner banner--err">Couldn't send — fix the highlighted fields below.</p>`
+    ? `<p class="banner banner--err">${escapeHtml(bannerText)}</p>`
+    : "";
+  // Widget + loader script — only when a site key is configured.
+  const turnstile = turnstileSiteKey
+    ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <div class="cf-turnstile" data-sitekey="${escapeHtml(turnstileSiteKey)}"></div>`
     : "";
 
   const reasonOptions = REASONS.map(
@@ -156,6 +196,7 @@ ${banner}
     ${err("message")}
   </label>
 
+  ${turnstile}
   <button type="submit" class="primary">Send →</button>
 </form>`,
   );
@@ -203,6 +244,7 @@ function shell(productName: string, body: string): string {
     button { font: inherit; padding: 0.55rem 1.3rem; border: 1px solid #1a1a1a; border-radius: 2px; background: #fff; color: #1a1a1a; cursor: pointer; }
     button.primary { background: #1a1a1a; color: #f8f6f2; }
     button.primary:hover { background: #333; }
+    .cf-turnstile { margin-bottom: 1rem; }
     .err { color: #a00; font-size: 0.85rem; margin: 0.25rem 0 0; }
     .banner { padding: 0.6rem 0.8rem; border: 1px solid; margin: 0 0 1.25rem; font-size: 0.92rem; }
     .banner--err { border-color: #a00; background: #fbe8e8; color: #5a0000; }

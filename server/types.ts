@@ -23,9 +23,10 @@ export interface Env {
   ADMIN_API_JWT_SECRET: string;   // `wrangler secret put`
   DISCORD_WEBHOOK: string;        // `wrangler secret put` — /contact form sink
   /**
-   * Cloudflare Turnstile keys for admin sign-in bot protection. Both
-   * env-gated and optional: when unset, the human check is bypassed (dev
-   * mode). When both set, /api/auth/request requires a valid token. The
+   * Cloudflare Turnstile keys for bot protection on admin sign-in, the
+   * archive post forms, and the apex /contact form. Both env-gated and
+   * optional: when unset, the human check is bypassed (dev mode). When
+   * both set, those endpoints require a valid token. The
    * site key is public (served via /api/auth/config so the SPA can mount
    * the widget); the secret is a Worker secret.
    */

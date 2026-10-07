@@ -1,5 +1,6 @@
 /**
- * Cloudflare Turnstile verification — admin sign-in bot protection.
+ * Cloudflare Turnstile verification — bot protection for admin sign-in,
+ * the archive post forms, and the apex /contact form.
  *
  * Env-gated, not feature-flagged. Pattern from auth.ljs.app:
  *   - If TURNSTILE_SECRET_KEY is unset → bypass (returns true). Dev mode
